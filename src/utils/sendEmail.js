@@ -55,7 +55,7 @@ const transporter = nodemailer.createTransport({
 const sendEmail = async (to, subject, html) => {
     try {
         await transporter.sendMail({
-            from: `FoodTrace <${process.env.SMTP_USER}>`,
+            from: `LuckyOneMall <${process.env.SMTP_USER}>`,
             to,
             subject,
             html,
