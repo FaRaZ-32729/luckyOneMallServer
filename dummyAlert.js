@@ -1,11 +1,11 @@
 const WebSocket = require("ws");
 
-const SERVER_URL = "ws://localhost:5050/ws/alerts";
+const SERVER_URL = "https://api.iotfiysolutions.com/ws/alerts";
 
 const DEVICES = [
     "device-001",
-    "device-002",
-    "device-003",
+    // "device-002",
+    // "device-003",
 ];
 
 // generates random values
@@ -16,20 +16,6 @@ function getRandomValue(min, max) {
 // simulate one device connection
 function simulateDevice(deviceId) {
     const ws = new WebSocket(SERVER_URL);
-
-    // sends heartbeat 
-    // const heartbeatInterval = setInterval(() => {
-    //     if (ws.readyState === WebSocket.OPEN) {
-    //         const heartbeat = {
-    //             type: "heartbeat",
-    //             deviceId: deviceId,
-    //             timestamp: new Date().toISOString()
-    //         };
-
-    //         ws.send(JSON.stringify(heartbeat));
-    //         console.log(`[${deviceId}] Heartbeat sent`);
-    //     }
-    // }, 5000);
 
     ws.on("open", () => {
         console.log(`[${deviceId}] Connected to WebSocket Server`);

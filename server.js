@@ -65,7 +65,7 @@ app.use("/device", authenticate, deviceRouter);
 app.use("/alert", authenticate, alertsRouter);
 
 app.get("/", (req, res) => {
-    res.send("wellcome ");
+    res.send("Hellow FaRaZ to IOTFIY-LuckyOne");
 });
 
 
