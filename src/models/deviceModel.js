@@ -4,7 +4,7 @@ const conditionSchema = new mongoose.Schema({
   type: {
     type: String,
     required: true,
-    enum: ["temperature", "humidity"],
+    enum: ["temperature", "humidity", "odour", "AQI", "gass"],
   },
   operator: {
     type: String,
@@ -20,18 +20,37 @@ const conditionSchema = new mongoose.Schema({
 const deviceSchema = new mongoose.Schema(
   {
     deviceId: { type: String, unique: true, required: true },
+
+    deviceType: {
+      type: String,
+      required: true,
+      enum: ["OMD", "TMD", "AQIMD", "GLMD"],
+    },
+
     venue: { type: mongoose.Schema.Types.ObjectId, ref: "Venue", required: true },
     conditions: [conditionSchema],
 
     apiKey: { type: String, unique: true, required: true },
 
-    // alerts
+    // COMMON alerts (all devices)
     temperatureAlert: { type: Boolean, default: false },
     humidityAlert: { type: Boolean, default: false },
-    odourAlert: { type: Boolean, default: false },
+
     espTemprature: { type: Number, default: null },
     espHumidity: { type: Number, default: null },
-    espOdour: { type: Number, default: null },
+
+    // OMD
+    odourAlert: { type: Boolean },
+    espOdour: { type: Number },
+
+    // AQIMD
+    aqiAlert: { type: Boolean },
+    espAQI: { type: Number },
+
+    // GLMD
+    glAlert: { type: Boolean },
+    espGL: { type: Number },
+
     lastUpdateTime: { type: Date, default: null }
 
   },

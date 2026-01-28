@@ -105,7 +105,7 @@ const getUserVenues = async (req, res) => {
             });
         }
 
-        // Return user venues (they already contain venueId + venueName)
+        // Return user venues
         res.status(200).json({
             message: "User venues fetched successfully",
             venues: user.venues,
@@ -116,6 +116,7 @@ const getUserVenues = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
 // update venue
 const updateVenue = async (req, res) => {
     try {
@@ -171,7 +172,7 @@ const updateVenueAsAdmin = async (req, res) => {
         }
 
 
-        let newOrganizationId = venue.organization; // default: existing org
+        let newOrganizationId = venue.organization;
 
         // If admin wants to update organization
         if (organizationId) {
@@ -216,7 +217,6 @@ const updateVenueAsAdmin = async (req, res) => {
         res.status(500).json({ message: "Error updating venue" });
     }
 };
-
 
 // delete venue
 const deleteVenue = async (req, res) => {

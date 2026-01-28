@@ -23,11 +23,17 @@ const getAlerts = async (req, res) => {
                 (d) => d.venue._id.toString() === venue._id.toString()
             );
 
-            // NEW ALERT LOGIC
+            // Devices with any alerts
             const devicesWithAlerts = venueDevices.filter(
-                (d) => d.temperatureAlert || d.humidityAlert || d.odourAlert
+                (d) =>
+                    d.temperatureAlert ||
+                    d.humidityAlert ||
+                    d.odourAlert ||
+                    d.aqiAlert ||
+                    d.glAlert
             );
 
+            // Temperature alerts
             const temperatureAlerts = venueDevices
                 .filter((d) => d.temperatureAlert)
                 .map((d) => ({
@@ -36,6 +42,7 @@ const getAlerts = async (req, res) => {
                     humidity: d.espHumidity
                 }));
 
+            // Humidity alerts
             const humidityAlerts = venueDevices
                 .filter((d) => d.humidityAlert)
                 .map((d) => ({
@@ -44,12 +51,34 @@ const getAlerts = async (req, res) => {
                     humidity: d.espHumidity
                 }));
 
+            // Odour alerts
             const odourAlerts = venueDevices
                 .filter((d) => d.odourAlert)
                 .map((d) => ({
                     deviceId: d.deviceId,
                     temperature: d.espTemprature,
-                    humidity: d.espHumidity
+                    humidity: d.espHumidity,
+                    odour: d.espOdour
+                }));
+
+            // AQI alerts
+            const aqiAlerts = venueDevices
+                .filter((d) => d.aqiAlert)
+                .map((d) => ({
+                    deviceId: d.deviceId,
+                    temperature: d.espTemprature,
+                    humidity: d.espHumidity,
+                    AQI: d.espAQI
+                }));
+
+            // Gas alerts
+            const glAlerts = venueDevices
+                .filter((d) => d.glAlert)
+                .map((d) => ({
+                    deviceId: d.deviceId,
+                    temperature: d.espTemprature,
+                    humidity: d.espHumidity,
+                    gass: d.espGL
                 }));
 
             return {
@@ -71,16 +100,22 @@ const getAlerts = async (req, res) => {
                 // Odour alerts
                 odourAlertCount: odourAlerts.length,
                 odourAlertDevices: odourAlerts,
+
+                // AQI alerts
+                aqiAlertCount: aqiAlerts.length,
+                aqiAlertDevices: aqiAlerts,
+
+                // Gas alerts
+                glAlertCount: glAlerts.length,
+                glAlertDevices: glAlerts,
             };
         });
 
         res.json({ organizationId, venues: result });
-
     } catch (err) {
         console.error("Error fetching alerts:", err.message);
         res.status(500).json({ message: "Server error" });
     }
 };
-
 
 module.exports = { getAlerts };

@@ -50,7 +50,6 @@ const getUsersByCreatorId = async (req, res) => {
     }
 };
 
-
 // update user status for admin only
 const updateUserStatus = async (req, res) => {
     try {
@@ -122,171 +121,6 @@ const updateUserStatus = async (req, res) => {
 };
 
 // update user profile
-
-// const updateUserProfile = async (req, res) => {
-//     try {
-//         const { id } = req.params;
-//         const { name, email, password, organization } = req.body;
-
-//         const user = await userModel.findById(id);
-//         if (!user) {
-//             return res.status(404).json({ message: "User not found" });
-//         }
-
-//         // Update name if provided
-//         if (name) user.name = name;
-
-//         // Update email if provided and not already in use
-//         if (email && email !== user.email) {
-//             const emailExists = await userModel.findOne({ email });
-//             if (emailExists) {
-//                 return res.status(400).json({ message: "Email already in use" });
-//             }
-//             user.email = email;
-//         }
-
-//         // Update organization if provided
-//         if (organization) {
-//             user.organization = organization;
-//         }
-
-//         // Update password if provided
-//         if (password) {
-//             // const salt = await bcrypt.genSalt(10);
-//             user.password = await bcrypt.hash(password, 10);
-//         }
-
-//         // Save the user
-//         await user.save();
-
-//         res.status(200).json({
-//             message: "User updated successfully",
-//             user,
-//         });
-//     } catch (err) {
-//         console.error("Error updating user:", err);
-//         res.status(500).json({ message: "Error updating user" });
-//     }
-// };
-
-////////////////////new
-
-
-// const updateUserProfile = async (req, res) => {
-//     try {
-//         const { id } = req.params;
-//         const { name, email, password, organization, venues } = req.body;
-
-//         const creator = req.user; // logged-in user making request
-
-//         // Get user to update
-//         const user = await userModel.findById(id);
-//         if (!user) {
-//             return res.status(404).json({ message: "User not found" });
-//         }
-
-//         /* ------------------------------------------------------
-//             COMMON VALIDATIONS
-//         ------------------------------------------------------ */
-
-//         // Check duplicate email
-//         if (email && email !== user.email) {
-//             const emailExists = await userModel.findOne({ email });
-//             if (emailExists) {
-//                 return res.status(400).json({ message: "Email already in use" });
-//             }
-//             user.email = email;
-//         }
-
-//         // Update name
-//         if (name) user.name = name;
-
-//         // Update password
-//         if (password) {
-//             user.password = await bcrypt.hash(password, 10);
-//         }
-
-//         /* ------------------------------------------------------
-//             ADMIN LOGIC
-//         ------------------------------------------------------ */
-//         if (creator.role === "admin") {
-
-//             // Admin CAN update organization
-//             if (organization) {
-//                 const orgExists = await organizationModel.findById(organization);
-//                 if (!orgExists) {
-//                     return res.status(404).json({ message: "Organization not found" });
-//                 }
-//                 user.organization = organization;
-//             }
-
-//             // Admin CANNOT update venues because admin-created users do not have venues
-//             if (venues) {
-//                 return res.status(400).json({
-//                     message: "Admin cannot update venues for this user"
-//                 });
-//             }
-//         }
-
-//         /* ------------------------------------------------------
-//             USER LOGIC (creator.role === "user")
-//         ------------------------------------------------------ */
-//         else if (creator.role === "user") {
-
-//             // User-created users CANNOT change organization
-//             if (organization && organization !== String(user.organization)) {
-//                 return res.status(403).json({
-//                     message: "You are not allowed to change organization"
-//                 });
-//             }
-
-//             /* ---- Venues Validation ---- */
-//             if (!venues || venues.length === 0) {
-//                 return res.status(400).json({
-//                     message: "At least one venue must be assigned"
-//                 });
-//             }
-
-//             // Validate venue IDs belong to same org
-//             const validVenues = await venueModel.find({
-//                 _id: { $in: venues },
-//                 organization: creator.organization,
-//             });
-
-//             if (validVenues.length !== venues.length) {
-//                 return res.status(400).json({
-//                     message: "One or more venues are invalid or not in your organization"
-//                 });
-//             }
-
-//             user.venues = validVenues.map(v => ({
-//                 venueId: v._id,
-//                 venueName: v.name,
-//             }));
-//         }
-
-//         /* ------------------------------------------------------
-//             SAVE USER
-//         ------------------------------------------------------ */
-//         await user.save();
-
-//         const updatedUser = await userModel
-//             .findById(id)
-//             .populate("organization", "name")
-//             .populate("venues.venueId", "name");
-
-//         res.status(200).json({
-//             message: "User updated successfully",
-//             user: updatedUser,
-//         });
-
-//     } catch (err) {
-//         console.error("Error updating user:", err);
-//         res.status(500).json({ message: "Error updating user" });
-//     }
-// };
-
-
 const updateUserProfile = async (req, res) => {
     try {
         const { id } = req.params;
@@ -420,8 +254,6 @@ const updateUserProfile = async (req, res) => {
     }
 };
 
-
-
 //delete user
 const deleteUser = async (req, res) => {
     try {
@@ -486,7 +318,6 @@ const addVenueToUser = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
-
 
 // remove a venue form user's venue array
 const removeVenueFromUser = async (req, res) => {

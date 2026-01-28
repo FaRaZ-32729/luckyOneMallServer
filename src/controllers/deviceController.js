@@ -2,7 +2,7 @@ const deviceModel = require("../models/deviceModel");
 const venueModel = require("../models/venueModal");
 
 
-
+// generates apiKey while creating and updating the device
 const generateApiKey = (deviceId, conditions) => {
     let rawString = deviceId;
 
@@ -13,14 +13,49 @@ const generateApiKey = (deviceId, conditions) => {
     return Buffer.from(rawString).toString("base64");
 };
 
+// object containing fields depends on deviceTypes while creating the device
+const DEVICE_CONDITIONS_MAP = {
+    OMD: ["odour", "temperature", "humidity"],
+    TMD: ["temperature", "humidity"],
+    AQIMD: ["AQI", "temperature", "humidity"],
+    GLMD: ["gass", "temperature", "humidity"],
+};
+
+// alerts and value fields based on deviceTypes while creating the device
+const DEVICE_EXTRA_FIELDS = {
+    OMD: {
+        odourAlert: false,
+        espOdour: null,
+    },
+    AQIMD: {
+        aqiAlert: false,
+        espAQI: null,
+    },
+    GLMD: {
+        glAlert: false,
+        espGL: null,
+    },
+};
+
+
 // create devices
 const createDevice = async (req, res) => {
     try {
-        const { deviceId, venueId, conditions } = req.body;
+        const { deviceId, venueId, deviceType, conditions } = req.body;
 
         // Basic field validation
-        if (!deviceId || !venueId || conditions.length === 0) {
-            return res.status(400).json({ message: "deviceId , venueId and conditions are required" });
+        if (!deviceId || !venueId || !deviceType || !conditions || conditions.length === 0) {
+            return res.status(400).json({
+                message: "deviceId, venueId, deviceType and conditions are required",
+            });
+        }
+
+        // Validate deviceType
+        const allowedDeviceTypes = ["OMD", "TMD", "AQIMD", "GLMD"];
+        if (!allowedDeviceTypes.includes(deviceType)) {
+            return res.status(400).json({
+                message: `Invalid deviceType. Allowed: ${allowedDeviceTypes.join(", ")}`,
+            });
         }
 
         // Check venue existence
@@ -36,53 +71,74 @@ const createDevice = async (req, res) => {
         }
 
         // Validate conditions array
-        if (conditions) {
-            if (!Array.isArray(conditions)) {
-                return res.status(400).json({ message: "Conditions must be an array" });
-            }
+        if (!Array.isArray(conditions)) {
+            return res.status(400).json({ message: "Conditions must be an array" });
+        }
 
-            for (const cond of conditions) {
-                // Required keys
-                if (!cond.type || !cond.operator || cond.value === undefined) {
-                    return res.status(400).json({
-                        message: "Each condition must include type, operator, and value",
-                    });
-                }
+        const requiredTypes = DEVICE_CONDITIONS_MAP[deviceType];
+        const providedTypes = conditions.map(c => c.type);
 
-                // Allowed type values
-                const validTypes = ["temperature", "humidity"];
-                if (!validTypes.includes(cond.type)) {
-                    return res.status(400).json({
-                        message: `Invalid type "${cond.type}". Allowed types: ${validTypes.join(", ")}`,
-                    });
-                }
-
-                // Allowed operators
-                const validOps = [">", "<"];
-                if (!validOps.includes(cond.operator)) {
-                    return res.status(400).json({
-                        message: `Invalid operator "${cond.operator}". Allowed operators: >, <`,
-                    });
-                }
-
+        // Ensure required condition types exist
+        for (const type of requiredTypes) {
+            if (!providedTypes.includes(type)) {
+                return res.status(400).json({
+                    message: `${deviceType} requires condition type "${type}"`,
+                });
             }
         }
 
-        // Generate API Key
-        const apiKey = generateApiKey(deviceId, conditions || []);
+        // Existing per-condition validation (kept intact)
+        const validTypes = ["temperature", "humidity", "odour", "AQI", "gass"];
+        const validOps = [">", "<"];
+
+        for (const cond of conditions) {
+            if (!cond.type || !cond.operator || cond.value === undefined) {
+                return res.status(400).json({
+                    message: "Each condition must include type, operator, and value",
+                });
+            }
+
+            if (!validTypes.includes(cond.type)) {
+                return res.status(400).json({
+                    message: `Invalid type "${cond.type}"`,
+                });
+            }
+
+            if (!validOps.includes(cond.operator)) {
+                return res.status(400).json({
+                    message: `Invalid operator "${cond.operator}"`,
+                });
+            }
+        }
+
+        // Generate API Key (unchanged logic)
+        const apiKey = generateApiKey(deviceId, conditions);
 
         // Save device
-        const newDevice = await deviceModel.create({
+        const baseDeviceData = {
             deviceId,
+            deviceType,
             venue: venueId,
-            conditions: conditions,
+            conditions,
             apiKey,
+
+            // common fields always present
+            temperatureAlert: false,
+            humidityAlert: false,
+            espTemprature: null,
+            espHumidity: null,
+        };
+
+        // inject device-type specific fields
+        const extraFields = DEVICE_EXTRA_FIELDS[deviceType] || {};
+
+        const newDevice = await deviceModel.create({
+            ...baseDeviceData,
+            ...extraFields,
         });
 
-        return res.status(201).json({
-            message: "Device created successfully",
-            device: newDevice,
-        });
+        return res.status(201).json({ message: "Device created successfully", device: newDevice, });
+
     } catch (error) {
         console.error("Error creating device:", error);
         return res.status(500).json({ message: "Internal Server Error" });
@@ -100,14 +156,6 @@ const getAllDevices = async (req, res) => {
                 select: "name"
             }
         })
-        // .populate({
-        //     path: "venue",
-        //     select: "name organization",
-        //     populate: {
-        //         path: "organization",
-        //         select: "name"
-        //     }
-        // .populate("venue", "name");
 
         if (!devices) return res.status(404).json({ message: "No Devices" });
 
@@ -206,7 +254,7 @@ const updateDevice = async (req, res) => {
                 return res.status(400).json({ message: "Conditions must be an array" });
             }
 
-            const validTypes = ["temperature", "humidity"];
+            const validTypes = ["temperature", "humidity", "odour", "AQI", "gass"];
             const validOps = [">", "<"];
 
             for (const cond of conditions) {
