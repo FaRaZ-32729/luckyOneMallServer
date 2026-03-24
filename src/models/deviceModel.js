@@ -4,7 +4,7 @@ const conditionSchema = new mongoose.Schema({
   type: {
     type: String,
     required: true,
-    enum: ["temperature", "humidity", "odour", "AQI", "gass", "current", "voltage"],
+    enum: ["temperature", "humidity", "odour", "AQI", "gass", "voltage"],
   },
   operator: {
     type: String,
@@ -40,22 +40,22 @@ const deviceSchema = new mongoose.Schema(
     espHumidity: { type: Number, default: null },
 
     // OMD
-    odourAlert: { type: Boolean },
-    espOdour: { type: Number },
+    odourAlert: { type: Boolean, default: false },
+    espOdour: { type: Number, default: null },
 
     // AQIMD
-    aqiAlert: { type: Boolean },
-    espAQI: { type: Number },
+    aqiAlert: { type: Boolean, default: false },
+    espAQI: { type: Number, default: null },
 
     // GLMD
-    glAlert: { type: Boolean },
-    espGL: { type: Number },
+    glAlert: { type: Boolean, default: false },
+    espGL: { type: Number, default: null },
 
     // EMD
-    currentAlert: { type: Boolean },
-    espCurrent: { type: Number },
-    voltageAlert: { type: Boolean },
-    espVoltage: { type: Number },
+    currentAlert: { type: Boolean, default: false },
+    espCurrent: { type: Number, default: null },
+    voltageAlert: { type: Boolean, default: false },
+    espVoltage: { type: Number, default: null },
 
     lastUpdateTime: { type: Date, default: null }
 

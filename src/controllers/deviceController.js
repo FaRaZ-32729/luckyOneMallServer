@@ -19,7 +19,7 @@ const DEVICE_CONDITIONS_MAP = {
     TMD: ["temperature", "humidity"],
     AQIMD: ["AQI", "temperature", "humidity"],
     GLMD: ["gass", "temperature", "humidity"],
-    EMD: ["current", "voltage", "temperature", "humidity"],
+    EMD: ["voltage", "temperature", "humidity"],
 };
 
 // alerts and value fields based on deviceTypes while creating the device
@@ -37,8 +37,6 @@ const DEVICE_EXTRA_FIELDS = {
         espGL: null,
     },
     EMD: {
-        currentAlert: false,
-        espCurrent: null,
         voltageAlert: false,
         espVoltage: null,
     }
@@ -95,8 +93,8 @@ const createDevice = async (req, res) => {
         }
 
         // Existing per-condition validation (kept intact)
-        const validTypes = ["temperature", "humidity", "odour", "AQI", "gass", "current", "voltage"];
-        const validOps = [">", "<" , "="];
+        const validTypes = ["temperature", "humidity", "odour", "AQI", "gass", "voltage"];
+        const validOps = [">", "<", "="];
 
         for (const cond of conditions) {
             if (!cond.type || !cond.operator || cond.value === undefined) {
