@@ -9,7 +9,7 @@ const conditionSchema = new mongoose.Schema({
   operator: {
     type: String,
     required: true,
-    enum: [">", "<"],
+    enum: [">", "<", "="],
   },
   value: {
     type: Number,

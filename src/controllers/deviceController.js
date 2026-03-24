@@ -96,7 +96,7 @@ const createDevice = async (req, res) => {
 
         // Existing per-condition validation (kept intact)
         const validTypes = ["temperature", "humidity", "odour", "AQI", "gass", "current", "voltage"];
-        const validOps = [">", "<"];
+        const validOps = [">", "<" , "="];
 
         for (const cond of conditions) {
             if (!cond.type || !cond.operator || cond.value === undefined) {
