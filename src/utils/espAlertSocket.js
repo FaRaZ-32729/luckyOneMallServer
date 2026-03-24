@@ -94,6 +94,28 @@ const espAlertSocket = (server) => {
                     }
                 }
 
+                if (type === "EMD") {
+                    if (data.temperature !== undefined) {
+                        updatePayload.espTemprature = data.temperature;
+                        updatePayload.temperatureAlert = data.temperatureAlert === "HIGH";
+                    }
+
+                    if (data.humidity !== undefined) {
+                        updatePayload.espHumidity = data.humidity;
+                        updatePayload.humidityAlert = data.humidityAlert === "HIGH";
+                    }
+
+                    if (data.current !== undefined) {
+                        updatePayload.espCurrent = data.current;
+                        updatePayload.currentAlert = data.currentAlert === "HIGH";
+                    }
+
+                    if (data.voltage !== undefined) {
+                        updatePayload.espVoltage = data.voltage;
+                        updatePayload.voltageAlert = data.voltageAlert === "HIGH";
+                    }
+                }
+
                 // Update MongoDB
                 const updatedDevice = await deviceModel.findOneAndUpdate(
                     { deviceId: data.deviceId },

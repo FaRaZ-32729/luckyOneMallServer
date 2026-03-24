@@ -4,7 +4,7 @@ const conditionSchema = new mongoose.Schema({
   type: {
     type: String,
     required: true,
-    enum: ["temperature", "humidity", "odour", "AQI", "gass"],
+    enum: ["temperature", "humidity", "odour", "AQI", "gass", "current", "voltage"],
   },
   operator: {
     type: String,
@@ -24,7 +24,7 @@ const deviceSchema = new mongoose.Schema(
     deviceType: {
       type: String,
       required: true,
-      enum: ["OMD", "TMD", "AQIMD", "GLMD"],
+      enum: ["OMD", "TMD", "AQIMD", "GLMD", "EMD"],
     },
 
     venue: { type: mongoose.Schema.Types.ObjectId, ref: "Venue", required: true },
@@ -50,6 +50,12 @@ const deviceSchema = new mongoose.Schema(
     // GLMD
     glAlert: { type: Boolean },
     espGL: { type: Number },
+
+    // EMD
+    currentAlert: { type: Boolean },
+    espCurrent: { type: Number },
+    voltageAlert: { type: Boolean },
+    espVoltage: { type: Number },
 
     lastUpdateTime: { type: Date, default: null }
 

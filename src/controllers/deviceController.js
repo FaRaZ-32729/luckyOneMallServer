@@ -19,6 +19,7 @@ const DEVICE_CONDITIONS_MAP = {
     TMD: ["temperature", "humidity"],
     AQIMD: ["AQI", "temperature", "humidity"],
     GLMD: ["gass", "temperature", "humidity"],
+    EMD: ["current", "voltage", "temperature", "humidity"],
 };
 
 // alerts and value fields based on deviceTypes while creating the device
@@ -35,6 +36,12 @@ const DEVICE_EXTRA_FIELDS = {
         glAlert: false,
         espGL: null,
     },
+    EMD: {
+        currentAlert: false,
+        espCurrent: null,
+        voltageAlert: false,
+        espVoltage: null,
+    }
 };
 
 
@@ -51,7 +58,7 @@ const createDevice = async (req, res) => {
         }
 
         // Validate deviceType
-        const allowedDeviceTypes = ["OMD", "TMD", "AQIMD", "GLMD"];
+        const allowedDeviceTypes = ["OMD", "TMD", "AQIMD", "GLMD", "EMD"];
         if (!allowedDeviceTypes.includes(deviceType)) {
             return res.status(400).json({
                 message: `Invalid deviceType. Allowed: ${allowedDeviceTypes.join(", ")}`,
@@ -88,7 +95,7 @@ const createDevice = async (req, res) => {
         }
 
         // Existing per-condition validation (kept intact)
-        const validTypes = ["temperature", "humidity", "odour", "AQI", "gass"];
+        const validTypes = ["temperature", "humidity", "odour", "AQI", "gass", "current", "voltage"];
         const validOps = [">", "<"];
 
         for (const cond of conditions) {
@@ -212,8 +219,11 @@ const getDevicesByVenue = async (req, res) => {
 // NOTE :  if user updates deviceId and Conditons than new apiKey will generate otherwise apiKey remains same
 const updateDevice = async (req, res) => {
     try {
+        console.log(req.body, ">>>> log while updating")
         const { id } = req.params;
         const { deviceId, venueId, conditions } = req.body;
+
+
 
         // Find device first
         const device = await deviceModel.findById(id);
