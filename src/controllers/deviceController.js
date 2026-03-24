@@ -217,7 +217,6 @@ const getDevicesByVenue = async (req, res) => {
 // NOTE :  if user updates deviceId and Conditons than new apiKey will generate otherwise apiKey remains same
 const updateDevice = async (req, res) => {
     try {
-        console.log(req.body, ">>>> log while updating")
         const { id } = req.params;
         const { deviceId, venueId, conditions } = req.body;
 
