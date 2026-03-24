@@ -262,8 +262,8 @@ const updateDevice = async (req, res) => {
                 return res.status(400).json({ message: "Conditions must be an array" });
             }
 
-            const validTypes = ["temperature", "humidity", "odour", "AQI", "gass"];
-            const validOps = [">", "<"];
+            const validTypes = ["temperature", "humidity", "odour", "AQI", "gass", "voltage"];
+            const validOps = [">", "<", "="];
 
             for (const cond of conditions) {
                 if (!cond.type || !cond.operator || cond.value === undefined) {
@@ -280,7 +280,7 @@ const updateDevice = async (req, res) => {
 
                 if (!validOps.includes(cond.operator)) {
                     return res.status(400).json({
-                        message: `Invalid operator "${cond.operator}". Allowed: >, <`,
+                        message: `Invalid operator "${cond.operator}" `,
                     });
                 }
 
