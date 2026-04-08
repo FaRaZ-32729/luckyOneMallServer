@@ -20,6 +20,8 @@ const DEVICE_CONDITIONS_MAP = {
     AQIMD: ["AQI", "temperature", "humidity"],
     GLMD: ["gass", "temperature", "humidity"],
     EMD: ["voltage", "temperature", "humidity"],
+    TSD: ["temperature", "humidity"],
+    ESD: ["temperature", "humidity"]
 };
 
 // alerts and value fields based on deviceTypes while creating the device
@@ -39,6 +41,12 @@ const DEVICE_EXTRA_FIELDS = {
     EMD: {
         voltageAlert: false,
         espVoltage: null,
+    },
+    CSD: {
+        currentAlert: false,
+        espCurrent: null,
+        voltageAlert: false,
+        espVoltage: null
     }
 };
 
@@ -56,7 +64,7 @@ const createDevice = async (req, res) => {
         }
 
         // Validate deviceType
-        const allowedDeviceTypes = ["OMD", "TMD", "AQIMD", "GLMD", "EMD"];
+        const allowedDeviceTypes = ["OMD", "TMD", "AQIMD", "GLMD", "EMD", "TSD", "ESD"];
         if (!allowedDeviceTypes.includes(deviceType)) {
             return res.status(400).json({
                 message: `Invalid deviceType. Allowed: ${allowedDeviceTypes.join(", ")}`,

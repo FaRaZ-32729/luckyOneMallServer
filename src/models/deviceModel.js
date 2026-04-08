@@ -24,7 +24,7 @@ const deviceSchema = new mongoose.Schema(
     deviceType: {
       type: String,
       required: true,
-      enum: ["OMD", "TMD", "AQIMD", "GLMD", "EMD"],
+      enum: ["OMD", "TMD", "AQIMD", "GLMD", "EMD", "TSD", "ESD"],
     },
 
     venue: { type: mongoose.Schema.Types.ObjectId, ref: "Venue", required: true },
@@ -62,6 +62,50 @@ const deviceSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+
+// ==================== FILTER FIELDS BEFORE SAVING ====================
+deviceSchema.pre('save', function (next) {
+  const allowedFields = {
+    OMD: ["odourAlert", "espOdour"],
+    AQIMD: ["aqiAlert", "espAQI"],
+    GLMD: ["glAlert", "espGL"],
+    EMD: ["voltageAlert", "espVoltage", "currentAlert", "espCurrent"],
+    TSD: [],
+    ESD: ["currentAlert", "espCurrent", "voltageAlert", "espVoltage"],
+    TMD: []
+  };
+
+  const deviceType = this.deviceType;
+  const specificFields = allowedFields[deviceType] || [];
+
+  // All allowed fields
+  const keepFields = [
+    "deviceId", "deviceType", "venue", "conditions", "apiKey",
+    "temperatureAlert", "humidityAlert", "espTemprature", "espHumidity",
+    "lastUpdateTime", ...specificFields
+  ];
+
+  // Remove all other fields
+  Object.keys(this.toObject()).forEach(key => {
+    if (!keepFields.includes(key) && !["_id", "createdAt", "updatedAt", "__v"].includes(key)) {
+      this.set(key, undefined);   // This removes the field from MongoDB
+    }
+  });
+
+  next();
+});
+
+// Also clean on update (findOneAndUpdate)
+deviceSchema.pre(['updateOne', 'findOneAndUpdate'], function (next) {
+  const update = this.getUpdate();
+  if (!update || !update.deviceType) return next();
+
+  // Same logic can be applied here if needed
+  next();
+});
+
+
 
 const deviceModel = mongoose.model("Device", deviceSchema);
 
