@@ -26,6 +26,6 @@ const deviceSwitchSchema = new mongoose.Schema({
 
 }, { timestamps: true });
 
-const deviceSwitchModel = mongoose.model("deviceControl", deviceSwitchSchema);
+const deviceSwitchModel = mongoose.model("deviceSwitch", deviceSwitchSchema);
 
 module.exports = deviceSwitchModel;

@@ -18,6 +18,7 @@ const authenticate = require("./src/middlewere/authMiddleware");
 
 // Utilities
 const { espAlertSocket } = require("./src/utils/espAlertSocket");
+const { schedulingSocket } = require("./src/utils/schedulingSocket");
 
 dotenv.config();
 dbConnection();
@@ -70,6 +71,7 @@ app.get("/", (req, res) => {
 
 
 const alertWss = espAlertSocket(server);
+const schedulingWss = schedulingSocket(server);
 
 // alerts ws://ip/localhost:5000/ws/alerts
 server.on("upgrade", (req, socket, head) => {
@@ -77,7 +79,13 @@ server.on("upgrade", (req, socket, head) => {
         alertWss.handleUpgrade(req, socket, head, (ws) => {
             alertWss.emit("connection", ws, req);
         });
-    } else {
+    }
+    else if (req.url === "/ws/scheduling") {          // ← New endpoint
+        schedulingWss.handleUpgrade(req, socket, head, (ws) => {
+            schedulingWss.emit("connection", ws, req);
+        });
+    }
+    else {
         socket.destroy(); // reject unknown paths
     }
 });

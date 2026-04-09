@@ -24,7 +24,7 @@ const toggleDeviceSwitch = async (req, res) => {
         }
 
         // Optional: restrict only SD devices
-        if (device.deviceType !== "SD") {
+        if (!["ESD", "TSD"].includes(device.deviceType)) {
             return res.status(400).json({
                 message: "Only Scheduler Devices can be controlled"
             });
