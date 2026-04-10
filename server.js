@@ -5,6 +5,7 @@ const cookieParser = require("cookie-parser");
 const cors = require("cors");
 const path = require("path");
 const http = require("http");
+require("./src/config/redisConnection");
 
 // Routers
 const userRouter = require("./src/routes/userRouter");
