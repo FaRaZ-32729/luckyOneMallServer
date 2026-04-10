@@ -1,5 +1,6 @@
 const deviceModel = require("../models/deviceModel");
 const deviceSwitchModel = require("../models/deviceSwitchModel");
+const { sendCommandToESP } = require("../utils/schedulingSocket");
 
 const toggleDeviceSwitch = async (req, res) => {
     try {
@@ -42,10 +43,24 @@ const toggleDeviceSwitch = async (req, res) => {
             { new: true, upsert: true }
         );
 
+        console.log(status , ">>>>> status form frontend")
+
+        // === SEND COMMAND TO ESP32 ===
+        const commandSent = sendCommandToESP(deviceId, status);
+
         return res.status(200).json({
             message: `Device turned ${status}`,
-            control
+            control,
+            commandSent,                    // tells frontend if ESP received it
+            note: commandSent
+                ? "Command sent to device successfully"
+                : "Command saved but device is offline"
         });
+
+        // return res.status(200).json({
+        //     message: `Device turned ${status}`,
+        //     control
+        // });
 
     } catch (error) {
         console.error("Error controlling device:", error);
