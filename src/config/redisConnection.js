@@ -1,5 +1,3 @@
-// config/redis.js
-
 const IORedis = require("ioredis");
 
 const redisConnection = new IORedis(process.env.REDIS_URL, {
@@ -9,19 +7,19 @@ const redisConnection = new IORedis(process.env.REDIS_URL, {
 
 // ================== EVENTS ==================
 redisConnection.on("connect", () => {
-    console.log("✅ Redis Connected Successfully");
+    console.log("Redis Connected Successfully");
 });
 
 redisConnection.on("ready", () => {
-    console.log("🚀 Redis Ready to Use");
+    console.log("Redis is Ready to Use");
 });
 
 redisConnection.on("error", (err) => {
-    console.error("❌ Redis Error:", err.message);
+    console.error("Error while connecting with Redis:", err.message);
 });
 
 redisConnection.on("close", () => {
-    console.log("⚠️ Redis Connection Closed");
+    console.log("Redis Connection Closed");
 });
 
 module.exports = redisConnection;
