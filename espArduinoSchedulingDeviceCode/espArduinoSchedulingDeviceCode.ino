@@ -26,6 +26,9 @@ bool deviceState = false;
 unsigned long lastSendTime = 0;
 const long sendInterval = 60000;
 
+unsigned long lastStatusTime = 0;
+const long statusInterval = 10000;  // every 10 seconds
+
 // ====================== SETUP ======================
 void setup() {
   Serial.begin(115200);
@@ -39,7 +42,8 @@ void setup() {
     Serial.print(".");
   }
   Serial.println("\n✅ WiFi Connected!");
-  Serial.print("IP: "); Serial.println(WiFi.localIP());
+  Serial.print("IP: ");
+  Serial.println(WiFi.localIP());
 
   webSocket.begin(websocket_server, websocket_port, websocket_path);
   webSocket.onEvent(webSocketEvent);
@@ -54,16 +58,21 @@ void loop() {
     sendRandomSensorData();
     lastSendTime = millis();
   }
+
+  if (millis() - lastStatusTime >= statusInterval) {
+    sendDeviceStatus();
+    lastStatusTime = millis();
+  }
 }
 
 // ================== Send Sensor Data ==================
 void sendRandomSensorData() {
   if (!webSocket.isConnected()) return;
 
-  float temp = random(25, 45) + random(0,9)/10.0;
-  float hum = random(40, 85) + random(0,9)/10.0;
-  float curr = random(2, 15) + random(0,9)/10.0;
-  float volt = random(210, 245) + random(0,9)/10.0;
+  float temp = random(25, 45) + random(0, 9) / 10.0;
+  float hum = random(40, 85) + random(0, 9) / 10.0;
+  float curr = random(2, 15) + random(0, 9) / 10.0;
+  float volt = random(210, 245) + random(0, 9) / 10.0;
 
   StaticJsonDocument<512> doc;
   doc["deviceId"] = deviceId;
@@ -80,21 +89,21 @@ void sendRandomSensorData() {
   String jsonString;
   serializeJson(doc, jsonString);
   webSocket.sendTXT(jsonString);
-  
+
   Serial.println("📤 Data Sent");
 }
 
 // ================== WebSocket Events ==================
-void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
+void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
   switch (type) {
-    
+
     case WStype_DISCONNECTED:
       Serial.println("❌ WebSocket Disconnected");
       break;
 
     case WStype_CONNECTED:
       Serial.println("✅ WebSocket Connected");
-      
+
       // Strong Handshake with proper scope
       {
         StaticJsonDocument<128> handshake;
@@ -122,13 +131,12 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 
         if (doc.containsKey("command")) {
           String cmd = doc["command"].as<String>();
-          
+
           if (cmd == "ON") {
             deviceState = true;
             lastSendTime = millis();
             Serial.println("🔴 DEVICE TURNED ON");
-          } 
-          else if (cmd == "OFF") {
+          } else if (cmd == "OFF") {
             deviceState = false;
             Serial.println("⚫ DEVICE TURNED OFF");
           }
@@ -151,4 +159,19 @@ void sendAcknowledgment(String command) {
   serializeJson(doc, json);
   webSocket.sendTXT(json);
   Serial.println("✅ Ack Sent: " + command);
+}
+
+void sendDeviceStatus() {
+  if (!webSocket.isConnected()) return;
+
+  StaticJsonDocument<200> doc;
+  doc["deviceId"] = deviceId;
+  doc["deviceType"] = deviceType;
+  doc["state"] = deviceState ? "ON" : "OFF";
+
+  String json;
+  serializeJson(doc, json);
+  webSocket.sendTXT(json);
+
+  Serial.println("📡 Status Sent: " + json);
 }

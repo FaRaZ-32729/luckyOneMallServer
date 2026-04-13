@@ -1,9 +1,8 @@
-// // sockets/schedulingSocket.js
-// const WebSocket = require("ws");
-// const deviceModel = require("../models/deviceModel");
-// const moment = require("moment-timezone");
+const WebSocket = require("ws");
+const deviceModel = require("../models/deviceModel");
+const moment = require("moment-timezone");
 
-// let schedulingWss;
+let schedulingWss;
 
 // const schedulingSocket = (server) => {
 //     schedulingWss = new WebSocket.Server({ noServer: true });
@@ -11,13 +10,12 @@
 
 //     schedulingWss.on("connection", (ws, req) => {
 //         const serverIp = req.socket.remoteAddress;
-//         console.log(`Scheduling Device (ESP32) connected from ${serverIp}`);
+//         console.log(`Scheduling Device connected from ${serverIp}`);
 
-//         // Optional: Store connected clients with deviceId for easy command sending
 //         ws.deviceId = null;
 
 //         ws.on("message", async (message) => {
-//             console.log("Received from Scheduling Device:", message.toString());
+//             console.log("Received from ESP32:", message.toString());
 
 //             let data;
 //             try {
@@ -28,27 +26,31 @@
 //             }
 
 //             if (!data.deviceId) {
-//                 console.log("deviceId missing in payload");
+//                 console.log("❌ No deviceId in payload");
 //                 return;
 //             }
 
-//             // Attach deviceId to socket for future command sending
-//             ws.deviceId = data.deviceId;
+//             // ==================== HANDSHAKE / AUTH ====================
+//             if (data.action === "HANDSHAKE" && data.deviceId && data.deviceType) {
+//                 ws.deviceId = data.deviceId;
+//                 console.log(`✅ Device Authenticated: ${data.deviceId} (${data.deviceType})`);
+
+//                 ws.send(JSON.stringify({
+//                     type: "AUTH_SUCCESS",
+//                     message: "Device registered successfully"
+//                 }));
+//                 return;   // Only return for handshake
+//             }
+//             console.log(data , ">>>> from esp")
+
+//             // ==================== SENSOR DATA UPDATE ====================
+//             ws.deviceId = data.deviceId;   // Ensure it's set
 
 //             try {
-//                 const device = await deviceModel.findOne({ deviceId: data.deviceId });
-//                 if (!device) {
-//                     console.log("Device not found:", data.deviceId);
-//                     return;
-//                 }
-
 //                 const updatePayload = {
 //                     lastUpdateTime: moment().tz("Asia/Karachi").format()
 //                 };
 
-//                 const type = device.deviceType;
-
-//                 // ==================== Update Sensor Data ====================
 //                 if (data.temperature !== undefined) {
 //                     updatePayload.espTemprature = data.temperature;
 //                     updatePayload.temperatureAlert = data.temperatureAlert === "HIGH";
@@ -66,29 +68,31 @@
 //                     updatePayload.voltageAlert = data.voltageAlert === "HIGH";
 //                 }
 
-//                 // Update in Database
-//                 await deviceModel.findOneAndUpdate(
+//                 const updated = await deviceModel.findOneAndUpdate(
 //                     { deviceId: data.deviceId },
 //                     updatePayload,
 //                     { new: true }
 //                 );
 
-//                 console.log(`✅ Updated scheduling device: ${data.deviceId}`);
+//                 console.log(`✅ MongoDB Updated Successfully for: ${data.deviceId}`);
+//                 if (updated) {
+//                     console.log(`   Temperature: ${updated.espTemprature}, Humidity: ${updated.espHumidity}`);
+//                 }
 
 //             } catch (error) {
-//                 console.error("Error updating scheduling device:", error.message);
+//                 console.error("❌ DB Update Error:", error.message);
 //             }
 //         });
 
 //         ws.on("close", () => {
-//             console.log(`Scheduling Device disconnected: ${ws.deviceId || 'Unknown'}`);
+//             console.log(`Device disconnected: ${ws.deviceId || 'Unknown'}`);
 //         });
 
 //         ws.on("error", (err) => {
-//             console.error("Scheduling WS Error:", err.message);
+//             console.error("WebSocket Error:", err.message);
 //         });
 
-//         // Send welcome message
+//         // Welcome Message
 //         setTimeout(() => {
 //             if (ws.readyState === WebSocket.OPEN) {
 //                 ws.send(JSON.stringify({ serverMsg: "Connected to Scheduling Server" }));
@@ -98,50 +102,6 @@
 
 //     return schedulingWss;
 // };
-
-
-// // ==================== HELPER TO SEND COMMAND ====================
-// const sendCommandToESP = (deviceId, status) => {
-//     if (!schedulingWss) return false;
-
-//     let sent = false;
-
-//     console.log(status , ">>>>> in websocket")
-
-//     schedulingWss.clients.forEach((client) => {
-//         if (client.deviceId === deviceId &&
-//             client.readyState === WebSocket.OPEN) {
-
-//             client.send(JSON.stringify({
-//                 type: "COMMAND",
-//                 command: status,           // "ON" or "OFF"
-//                 deviceId: deviceId,
-//                 timestamp: new Date().toISOString()
-//             }));
-
-//             console.log(`✅ Command ${status} sent to ESP32: ${deviceId}`);
-//             sent = true;
-//         }
-//     });
-
-//     if (!sent) {
-//         console.log(`⚠️ Device ${deviceId} is not connected. Command not sent.`);
-//     }
-
-//     return sent;
-// };
-
-// module.exports = { schedulingSocket, sendCommandToESP };
-
-// sockets/schedulingSocket.js
-
-
-
-const WebSocket = require("ws");
-const deviceModel = require("../models/deviceModel");
-const moment = require("moment-timezone");
-
-let schedulingWss;
 
 const schedulingSocket = (server) => {
     schedulingWss = new WebSocket.Server({ noServer: true });
@@ -165,62 +125,82 @@ const schedulingSocket = (server) => {
             }
 
             if (!data.deviceId) {
-                console.log("❌ No deviceId in payload");
+                console.log("No deviceId in payload");
                 return;
             }
 
             // ==================== HANDSHAKE / AUTH ====================
             if (data.action === "HANDSHAKE" && data.deviceId && data.deviceType) {
                 ws.deviceId = data.deviceId;
-                console.log(`✅ Device Authenticated: ${data.deviceId} (${data.deviceType})`);
+                console.log(` Device Authenticated: ${data.deviceId} (${data.deviceType})`);
 
                 ws.send(JSON.stringify({
                     type: "AUTH_SUCCESS",
                     message: "Device registered successfully"
                 }));
-                return;   // Only return for handshake
+                return;
             }
-            console.log(data , ">>>> from esp")
 
-            // ==================== SENSOR DATA UPDATE ====================
-            ws.deviceId = data.deviceId;   // Ensure it's set
+            // Set deviceId for all valid messages
+            ws.deviceId = data.deviceId;
 
-            try {
-                const updatePayload = {
-                    lastUpdateTime: moment().tz("Asia/Karachi").format()
-                };
-
-                if (data.temperature !== undefined) {
-                    updatePayload.espTemprature = data.temperature;
-                    updatePayload.temperatureAlert = data.temperatureAlert === "HIGH";
-                }
-                if (data.humidity !== undefined) {
-                    updatePayload.espHumidity = data.humidity;
-                    updatePayload.humidityAlert = data.humidityAlert === "HIGH";
-                }
-                if (data.current !== undefined) {
-                    updatePayload.espCurrent = data.current;
-                    updatePayload.currentAlert = data.currentAlert === "HIGH";
-                }
-                if (data.voltage !== undefined) {
-                    updatePayload.espVoltage = data.voltage;
-                    updatePayload.voltageAlert = data.voltageAlert === "HIGH";
-                }
-
-                const updated = await deviceModel.findOneAndUpdate(
-                    { deviceId: data.deviceId },
-                    updatePayload,
-                    { new: true }
-                );
-
-                console.log(`✅ MongoDB Updated Successfully for: ${data.deviceId}`);
-                if (updated) {
-                    console.log(`   Temperature: ${updated.espTemprature}, Humidity: ${updated.espHumidity}`);
-                }
-
-            } catch (error) {
-                console.error("❌ DB Update Error:", error.message);
+            // ==================== IGNORE ACK / CONTROL RESPONSES ====================
+            if (data.ack) {
+                console.log("⏭ ACK received, skipping DB update");
+                return;
             }
+
+            // ==================== ONLY PROCESS SENSOR DATA ====================
+            if (data.temperature || data.humidity || data.current || data.voltage) {
+
+                try {
+                    const updatePayload = {
+                        lastUpdateTime: moment().tz("Asia/Karachi").format()
+                    };
+
+                    if (data.temperature !== undefined) {
+                        updatePayload.espTemprature = data.temperature;
+                        updatePayload.temperatureAlert = data.temperatureAlert === "HIGH";
+                    }
+
+                    if (data.humidity !== undefined) {
+                        updatePayload.espHumidity = data.humidity;
+                        updatePayload.humidityAlert = data.humidityAlert === "HIGH";
+                    }
+
+                    if (data.current !== undefined) {
+                        updatePayload.espCurrent = data.current;
+                        updatePayload.currentAlert = data.currentAlert === "HIGH";
+                    }
+
+                    if (data.voltage !== undefined) {
+                        updatePayload.espVoltage = data.voltage;
+                        updatePayload.voltageAlert = data.voltageAlert === "HIGH";
+                    }
+
+                    const updated = await deviceModel.findOneAndUpdate(
+                        { deviceId: data.deviceId },
+                        updatePayload,
+                        { new: true }
+                    );
+
+                    console.log(`MongoDB Updated Successfully for: ${data.deviceId}`);
+
+                    if (updated) {
+                        console.log(
+                            `   Temperature: ${updated.espTemprature}, Humidity: ${updated.espHumidity}`
+                        );
+                    }
+
+                } catch (error) {
+                    console.error("DB Update Error:", error.message);
+                }
+
+                return;
+            }
+
+            // ==================== status ====================
+            console.log("status:", data);
         });
 
         ws.on("close", () => {
@@ -255,12 +235,12 @@ const sendCommandToESP = (deviceId, status) => {
                 deviceId: deviceId,
                 timestamp: new Date().toISOString()
             }));
-            console.log(`✅ Command ${status} SENT to ${deviceId}`);
+            console.log(`Command ${status} SENT to ${deviceId}`);
             sent = true;
         }
     });
 
-    if (!sent) console.log(`⚠️ Device ${deviceId} not connected`);
+    if (!sent) console.log(`Device ${deviceId} not connected`);
     return sent;
 };
 
