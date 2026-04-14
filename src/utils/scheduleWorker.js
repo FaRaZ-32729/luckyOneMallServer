@@ -52,6 +52,7 @@
 
 
 // src/workers/scheduleWorker.js
+
 require("dotenv").config();
 const { Worker } = require("bullmq");
 const connection = require("../config/redisConnection");
@@ -73,7 +74,7 @@ const worker = new Worker(
                 headers: { "Content-Type": "application/json" }
             });
         } catch (err) {
-            console.error("❌ Failed to notify main server:", err.message);
+            console.error("Failed to notify main server:", err.message);
         }
 
         return { deviceId, action };
@@ -82,9 +83,9 @@ const worker = new Worker(
 );
 
 worker.on("completed", (job) => {
-    console.log(`✅ Job Completed: ${job.id}`);
+    console.log(`Job Completed: ${job.id}`);
 });
 
 worker.on("failed", (job, err) => {
-    console.error(`❌ Job Failed: ${job.id}`, err);
+    console.error(`Job Failed: ${job.id}`, err);
 });
