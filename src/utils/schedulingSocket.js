@@ -153,7 +153,7 @@ const sendCommandToESP = async (deviceId, status) => {
                 payload.startTimeUnix = Math.floor(activeSchedule.startTime.getTime() / 1000);
                 payload.endTimeUnix = Math.floor(activeSchedule.endTime.getTime() / 1000);
 
-                console.log(`📅 ON command enriched with times → endTimeUnix: ${payload.endTimeUnix}`);
+                console.log(`ON command enriched with times → endTimeUnix: ${payload.endTimeUnix}`);
             }
         } catch (err) {
             console.error("Failed to fetch schedule times for ON command:", err.message);
@@ -197,7 +197,7 @@ const sendCommandToESP = async (deviceId, status) => {
 // ====================== RECONCILIATION FUNCTION ======================
 
 
-const reconcileMissedCommands = async (deviceId) => {   // ← removed ws param (not needed)
+const reconcileMissedCommands = async (deviceId) => {
     try {
         const now = moment().tz("Asia/Karachi");
 
@@ -210,17 +210,17 @@ const reconcileMissedCommands = async (deviceId) => {   // ← removed ws param 
             .limit(1);
 
         if (activeSchedules.length === 0) {
-            console.log(`🔄 Reconciliation: No active schedule for ${deviceId}`);
+            console.log(`Reconciliation: No active schedule for ${deviceId}`);
             return;
         }
 
         const schedule = activeSchedules[0];
-        console.log(`🔄 Reconciliation: Sending missed ON with endTimeUnix for ${deviceId}`);
+        console.log(`Reconciliation: Sending missed ON with endTimeUnix for ${deviceId}`);
 
         await sendCommandToESP(deviceId, schedule.status);   // ← now awaits
 
     } catch (err) {
-        console.error(`❌ Reconciliation Error for ${deviceId}:`, err.message);
+        console.error(`Reconciliation Error for ${deviceId}:`, err.message);
     }
 };
 

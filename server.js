@@ -77,6 +77,7 @@ const alertWss = espAlertSocket(server);
 const schedulingWss = schedulingSocket(server);
 
 // alerts ws://ip/localhost:5000/ws/alerts
+
 server.on("upgrade", (req, socket, head) => {
     if (req.url === "/ws/alerts") {
         alertWss.handleUpgrade(req, socket, head, (ws) => {

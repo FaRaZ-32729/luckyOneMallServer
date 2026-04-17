@@ -62,72 +62,142 @@ const scheduleModel = require("../models/scheduleModel");
 const scheduleQueue = require("../utils/scheduleQueue");
 const { sendCommandToESP } = require("../utils/schedulingSocket");
 
+// const createSchedule = async (req, res) => {
+//     try {
+//         const { deviceId, startTime, endTime, status } = req.body;
+
+//         // Validation
+//         if (!deviceId || !startTime || !endTime || !status) {
+//             return res.status(400).json({ message: "All fields are required: deviceId, startTime, endTime, status" });
+//         }
+
+//         if (!["ON", "OFF"].includes(status)) {
+//             return res.status(400).json({ message: "Status must be either 'ON' or 'OFF'" });
+//         }
+
+//         const now = new Date();
+//         const startDelay = new Date(startTime) - now;
+//         const endDelay = new Date(endTime) - now;
+
+//         if (startDelay < 0 || endDelay < 0) {
+//             return res.status(400).json({ message: "startTime and endTime must be in the future" });
+//         }
+
+//         let startAction = status;           // User provided start action
+//         let endAction;
+
+//         // Decide end action based on your requirement
+//         if (status === "ON") {
+//             endAction = "OFF";              // Normal case: ON → OFF
+//         } else {
+//             endAction = "OFF";              // As you requested: OFF → OFF
+//         }
+
+//         console.log(`📅 Scheduling: ${startAction} at ${startTime} | ${endAction} at ${endTime}`);
+
+//         // Create BullMQ Jobs
+//         const startJob = await scheduleQueue.add(
+//             "device-control",
+//             { deviceId, action: startAction },
+//             { delay: startDelay }
+//         );
+
+//         const endJob = await scheduleQueue.add(
+//             "device-control",
+//             { deviceId, action: endAction },
+//             { delay: endDelay }
+//         );
+
+//         // Save to MongoDB
+//         const schedule = await scheduleModel.create({
+//             deviceId,
+//             startTime,
+//             endTime,
+//             status: startAction,           // Save the user selected start status
+//             startJobId: startJob.id,
+//             endJobId: endJob.id
+//         });
+
+//         res.status(201).json({
+//             message: "Schedule created successfully",
+//             schedule
+//         });
+
+//     } catch (err) {
+//         console.error("Create Schedule Error:", err);
+//         res.status(500).json({ message: err.message });
+//     }
+// };
+
 const createSchedule = async (req, res) => {
     try {
-        const { deviceId, startTime, endTime, status } = req.body;
+        const { deviceId, startTime, endTime } = req.body;
 
         // Validation
-        if (!deviceId || !startTime || !endTime || !status) {
-            return res.status(400).json({ message: "All fields are required: deviceId, startTime, endTime, status" });
-        }
-
-        if (!["ON", "OFF"].includes(status)) {
-            return res.status(400).json({ message: "Status must be either 'ON' or 'OFF'" });
+        if (!deviceId || !startTime || !endTime) {
+            return res.status(400).json({ 
+                message: "All fields are required: deviceId, startTime, endTime" 
+            });
         }
 
         const now = new Date();
-        const startDelay = new Date(startTime) - now;
-        const endDelay = new Date(endTime) - now;
+        const startDate = new Date(startTime);
+        const endDate = new Date(endTime);
+
+        const startDelay = startDate - now;
+        const endDelay = endDate - now;
 
         if (startDelay < 0 || endDelay < 0) {
-            return res.status(400).json({ message: "startTime and endTime must be in the future" });
+            return res.status(400).json({ 
+                message: "startTime and endTime must be in the future" 
+            });
         }
 
-        let startAction = status;           // User provided start action
-        let endAction;
-
-        // Decide end action based on your requirement
-        if (status === "ON") {
-            endAction = "OFF";              // Normal case: ON → OFF
-        } else {
-            endAction = "OFF";              // As you requested: OFF → OFF
+        if (startDelay >= endDelay) {
+            return res.status(400).json({ 
+                message: "endTime must be after startTime" 
+            });
         }
 
-        console.log(`📅 Scheduling: ${startAction} at ${startTime} | ${endAction} at ${endTime}`);
+        console.log(`📅 Creating Schedule → ON at ${startTime} | OFF at ${endTime}`);
 
-        // Create BullMQ Jobs
+        // ==================== Create BullMQ Jobs ====================
         const startJob = await scheduleQueue.add(
             "device-control",
-            { deviceId, action: startAction },
+            { deviceId, action: "ON" },
             { delay: startDelay }
         );
 
         const endJob = await scheduleQueue.add(
             "device-control",
-            { deviceId, action: endAction },
+            { deviceId, action: "OFF" },
             { delay: endDelay }
         );
 
-        // Save to MongoDB
+        // ==================== Save to MongoDB ====================
         const schedule = await scheduleModel.create({
             deviceId,
-            startTime,
-            endTime,
-            status: startAction,           // Save the user selected start status
+            startTime: startDate,
+            endTime: endDate,
+            status: "ON",                    // Always ON as start action
             startJobId: startJob.id,
             endJobId: endJob.id
         });
 
         res.status(201).json({
-            message: "Schedule created successfully",
+            message: "Schedule created successfully (ON → OFF)",
             schedule
         });
 
     } catch (err) {
         console.error("Create Schedule Error:", err);
-        res.status(500).json({ message: err.message });
+        res.status(500).json({ 
+            message: "Internal Server Error",
+            error: err.message 
+        });
     }
 };
+
 
 const eventTrigger = async (req, res) => {
     try {
