@@ -1,7 +1,6 @@
 const WebSocket = require("ws");
 const deviceModel = require("../models/deviceModel");
 const scheduleModel = require("../models/scheduleModel");
-const moment = require("moment-timezone");
 
 let schedulingWss;
 
