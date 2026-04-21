@@ -60,7 +60,8 @@ const schedulingSocket = (server) => {
 
                 try {
                     const updatePayload = {
-                        lastUpdateTime: moment().tz("Asia/Karachi").format()
+                        // lastUpdateTime: moment().tz("Asia/Karachi").format()
+                        lastUpdateTime: new Date()
                     };
 
                     if (data.temperature !== undefined) {
@@ -141,7 +142,8 @@ const sendCommandToESP = async (deviceId, status) => {
     // ==================== ONLY FOR "ON" → attach schedule times ====================
     if (status === "ON") {
         try {
-            const now = moment().tz("Asia/Karachi").toDate();
+            // const now = moment().tz("Asia/Karachi").toDate();
+            const now = new Date();
 
             const activeSchedule = await scheduleModel.findOne({
                 deviceId,
@@ -199,7 +201,8 @@ const sendCommandToESP = async (deviceId, status) => {
 
 const reconcileMissedCommands = async (deviceId) => {
     try {
-        const now = moment().tz("Asia/Karachi");
+        // const now = moment().tz("Asia/Karachi");
+        const now = new Date();
 
         const activeSchedules = await scheduleModel.find({
             deviceId,

@@ -53,39 +53,45 @@
 
 // src/workers/scheduleWorker.js
 
-require("dotenv").config();
+
+// src/utils/scheduleWorker.js
+const path = require("path");
+require("dotenv").config({ 
+    path: path.resolve(__dirname, "../../.env") 
+});
+
 const { Worker } = require("bullmq");
 const connection = require("../config/redisConnection");
-const axios = require("axios");   // ← Add this
+const axios = require("axios");
+
+console.log("🚀 Schedule Worker Starting...");
+console.log("REDIS_URL Loaded:", process.env.REDIS_URL ? "✅ YES" : "❌ NO");
 
 const worker = new Worker(
     "schedule-queue",
     async (job) => {
         const { deviceId, action } = job.data;
+        console.log(`🚀 Executing Job: ${deviceId} → ${action}`);
 
-        console.log(`🚀 Executing Job: ${deviceId} -> ${action}`);
-
-        // Notify main server instead of using global
         try {
             await axios.post("http://localhost:5051/schedule/trigger", {
                 deviceId,
                 action
             }, {
-                headers: { "Content-Type": "application/json" }
+                headers: { "Content-Type": "application/json" },
+                timeout: 10000
             });
+            console.log(`✅ ${action} command sent to main server`);
         } catch (err) {
-            console.error("Failed to notify main server:", err.message);
+            console.error(`❌ Failed to notify main server:`, err.message);
         }
-
-        return { deviceId, action };
     },
     { connection }
 );
 
-worker.on("completed", (job) => {
-    console.log(`Job Completed: ${job.id}`);
+worker.on("ready", () => {
+    console.log("✅ BullMQ Worker is Ready & Connected to Redis Cloud");
 });
 
-worker.on("failed", (job, err) => {
-    console.error(`Job Failed: ${job.id}`, err);
-});
+worker.on("completed", (job) => console.log(`✅ Job Completed: ${job.id}`));
+worker.on("failed", (job, err) => console.error(`❌ Job Failed: ${job.id}`, err.message));
