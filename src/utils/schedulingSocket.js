@@ -198,34 +198,58 @@ const sendCommandToESP = async (deviceId, status) => {
 
 // ====================== RECONCILIATION FUNCTION ======================
 
-
 const reconcileMissedCommands = async (deviceId) => {
     try {
-        // const now = moment().tz("Asia/Karachi");
         const now = new Date();
 
-        const activeSchedules = await scheduleModel.find({
+        const activeSchedule = await scheduleModel.findOne({
             deviceId,
-            startTime: { $lte: now.toDate() },
-            endTime: { $gt: now.toDate() }
-        })
-            .sort({ startTime: -1 })
-            .limit(1);
+            startTime: { $lte: now },
+            endTime: { $gt: now }
+        }).sort({ startTime: -1 });
 
-        if (activeSchedules.length === 0) {
-            console.log(`Reconciliation: No active schedule for ${deviceId}`);
+        if (!activeSchedule) {
+            console.log(`🔄 Reconciliation: No active schedule for ${deviceId}`);
             return;
         }
 
-        const schedule = activeSchedules[0];
-        console.log(`Reconciliation: Sending missed ON with endTimeUnix for ${deviceId}`);
+        console.log(`🔄 Reconciliation: Device ${deviceId} reconnected during active schedule → sending ${activeSchedule.status}`);
 
-        await sendCommandToESP(deviceId, schedule.status);   // ← now awaits
+        await sendCommandToESP(deviceId, activeSchedule.status);
 
     } catch (err) {
-        console.error(`Reconciliation Error for ${deviceId}:`, err.message);
+        console.error(`❌ Reconciliation Error for ${deviceId}:`, err.message);
     }
 };
+
+
+// const reconcileMissedCommands = async (deviceId) => {
+//     try {
+//         // const now = moment().tz("Asia/Karachi");
+//         const now = new Date();
+
+//         const activeSchedules = await scheduleModel.find({
+//             deviceId,
+//             startTime: { $lte: now.toDate() },
+//             endTime: { $gt: now.toDate() }
+//         })
+//             .sort({ startTime: -1 })
+//             .limit(1);
+
+//         if (activeSchedules.length === 0) {
+//             console.log(`Reconciliation: No active schedule for ${deviceId}`);
+//             return;
+//         }
+
+//         const schedule = activeSchedules[0];
+//         console.log(`Reconciliation: Sending missed ON with endTimeUnix for ${deviceId}`);
+
+//         await sendCommandToESP(deviceId, schedule.status);   // ← now awaits
+
+//     } catch (err) {
+//         console.error(`Reconciliation Error for ${deviceId}:`, err.message);
+//     }
+// };
 
 // const reconcileMissedCommands = async (deviceId, ws) => {
 //     try {
