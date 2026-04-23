@@ -139,25 +139,102 @@ const sendCommandToESP = async (deviceId, status) => {
     };
 
     // ==================== ONLY FOR "ON" → attach schedule times ====================
+    // if (status === "ON") {
+    //     try {
+    //         // const now = moment().tz("Asia/Karachi").toDate();
+    //         const now = new Date();
+
+    //         const activeSchedule = await scheduleModel.findOne({
+    //             deviceId,
+    //             startTime: { $lte: now },
+    //             endTime: { $gt: now }
+    //         }).sort({ startTime: -1 });
+
+    //         if (activeSchedule) {
+    //             payload.startTimeUnix = Math.floor(activeSchedule.startTime.getTime() / 1000);
+    //             payload.endTimeUnix = Math.floor(activeSchedule.endTime.getTime() / 1000);
+
+    //             console.log(`ON command enriched with times → endTimeUnix: ${payload.endTimeUnix}`);
+    //         }
+    //     } catch (err) {
+    //         console.error("Failed to fetch schedule times for ON command:", err.message);
+    //     }
+    // }
     if (status === "ON") {
         try {
-            // const now = moment().tz("Asia/Karachi").toDate();
             const now = new Date();
 
-            const activeSchedule = await scheduleModel.findOne({
+            const currentDay = now.getUTCDay();
+
+            const dayMapReverse = {
+                0: "sunday",
+                1: "monday",
+                2: "tuesday",
+                3: "wednesday",
+                4: "thursday",
+                5: "friday",
+                6: "saturday"
+            };
+
+            const today = dayMapReverse[currentDay];
+
+            // Current UTC time HH:mm
+            const hours = String(now.getUTCHours()).padStart(2, "0");
+            const minutes = String(now.getUTCMinutes()).padStart(2, "0");
+            const currentTime = `${hours}:${minutes}`;
+
+            const schedules = await scheduleModel.find({
                 deviceId,
-                startTime: { $lte: now },
-                endTime: { $gt: now }
-            }).sort({ startTime: -1 });
+                days: today,
+                status: "ACTIVE"
+            });
+
+            let activeSchedule = null;
+
+            for (const schedule of schedules) {
+                const { startTime, endTime } = schedule;
+
+                if (startTime < endTime) {
+                    if (currentTime >= startTime && currentTime < endTime) {
+                        activeSchedule = schedule;
+                        break;
+                    }
+                } else {
+                    // 🔥 midnight crossover
+                    if (currentTime >= startTime || currentTime < endTime) {
+                        activeSchedule = schedule;
+                        break;
+                    }
+                }
+            }
 
             if (activeSchedule) {
-                payload.startTimeUnix = Math.floor(activeSchedule.startTime.getTime() / 1000);
-                payload.endTimeUnix = Math.floor(activeSchedule.endTime.getTime() / 1000);
+                // 🔥 Build TODAY's UTC date with endTime
+                const [endHour, endMinute] = activeSchedule.endTime.split(":");
 
-                console.log(`ON command enriched with times → endTimeUnix: ${payload.endTimeUnix}`);
+                let endDate = new Date(Date.UTC(
+                    now.getUTCFullYear(),
+                    now.getUTCMonth(),
+                    now.getUTCDate(),
+                    parseInt(endHour),
+                    parseInt(endMinute),
+                    0
+                ));
+
+                // 🔥 If crossed midnight → move to next day
+                if (activeSchedule.startTime > activeSchedule.endTime) {
+                    if (currentTime >= activeSchedule.startTime) {
+                        endDate.setUTCDate(endDate.getUTCDate() + 1);
+                    }
+                }
+
+                payload.endTimeUnix = Math.floor(endDate.getTime() / 1000);
+
+                console.log(`✅ ON enriched → endTimeUnix: ${payload.endTimeUnix}`);
             }
+
         } catch (err) {
-            console.error("Failed to fetch schedule times for ON command:", err.message);
+            console.error("Failed to attach schedule time:", err.message);
         }
     }
 
@@ -197,24 +274,76 @@ const sendCommandToESP = async (deviceId, status) => {
 
 // ====================== RECONCILIATION FUNCTION ======================
 
-const reconcileMissedCommands = async (deviceId) => {
+
+const reconcileMissedCommands = async (deviceId, ws) => {
     try {
         const now = new Date();
 
-        const activeSchedule = await scheduleModel.findOne({
-            deviceId,
-            startTime: { $lte: now },
-            endTime: { $gt: now }
-        }).sort({ startTime: -1 });
+        // ✅ Get UTC day (0–6)
+        const currentDay = now.getUTCDay();
 
-        if (!activeSchedule) {
-            console.log(`🔄 Reconciliation: No active schedule for ${deviceId}`);
+        // Map to string (same as your DB)
+        const dayMapReverse = {
+            0: "sunday",
+            1: "monday",
+            2: "tuesday",
+            3: "wednesday",
+            4: "thursday",
+            5: "friday",
+            6: "saturday"
+        };
+
+        const today = dayMapReverse[currentDay];
+
+        // ✅ Get current UTC time in HH:mm
+        const hours = String(now.getUTCHours()).padStart(2, "0");
+        const minutes = String(now.getUTCMinutes()).padStart(2, "0");
+        const currentTime = `${hours}:${minutes}`;
+
+        // 🔥 Find schedules for today
+        const schedules = await scheduleModel.find({
+            deviceId,
+            days: today,
+            status: "ACTIVE"
+        });
+
+        if (!schedules.length) {
+            console.log(`🔄 No schedule for today (${today})`);
             return;
         }
 
-        console.log(`🔄 Reconciliation: Device ${deviceId} reconnected during active schedule → sending ${activeSchedule.status}`);
+        // 🔥 Check if current time falls in any schedule
+        let activeSchedule = null;
 
-        await sendCommandToESP(deviceId, activeSchedule.status);
+        for (const schedule of schedules) {
+            const { startTime, endTime } = schedule;
+
+            // Handle normal case
+            if (startTime < endTime) {
+                if (currentTime >= startTime && currentTime < endTime) {
+                    activeSchedule = schedule;
+                    break;
+                }
+            }
+            // 🔥 Handle midnight crossover (IMPORTANT)
+            else {
+                if (
+                    currentTime >= startTime || currentTime < endTime
+                ) {
+                    activeSchedule = schedule;
+                    break;
+                }
+            }
+        }
+
+        if (!activeSchedule) {
+            console.log(`🔄 Device ${deviceId} is currently OUTSIDE schedule`);
+            return;
+        }
+
+        console.log(`🔄 Device ${deviceId} is INSIDE schedule → sending ON`);
+
+        await sendCommandToESP(deviceId, "ON");
 
     } catch (err) {
         console.error(`❌ Reconciliation Error for ${deviceId}:`, err.message);
@@ -224,67 +353,28 @@ const reconcileMissedCommands = async (deviceId) => {
 
 // const reconcileMissedCommands = async (deviceId) => {
 //     try {
-//         // const now = moment().tz("Asia/Karachi");
 //         const now = new Date();
 
-//         const activeSchedules = await scheduleModel.find({
+//         const activeSchedule = await scheduleModel.findOne({
 //             deviceId,
-//             startTime: { $lte: now.toDate() },
-//             endTime: { $gt: now.toDate() }
-//         })
-//             .sort({ startTime: -1 })
-//             .limit(1);
+//             startTime: { $lte: now },
+//             endTime: { $gt: now }
+//         }).sort({ startTime: -1 });
 
-//         if (activeSchedules.length === 0) {
-//             console.log(`Reconciliation: No active schedule for ${deviceId}`);
+//         if (!activeSchedule) {
+//             console.log(`🔄 Reconciliation: No active schedule for ${deviceId}`);
 //             return;
 //         }
 
-//         const schedule = activeSchedules[0];
-//         console.log(`Reconciliation: Sending missed ON with endTimeUnix for ${deviceId}`);
+//         console.log(`🔄 Reconciliation: Device ${deviceId} reconnected during active schedule → sending ${activeSchedule.status}`);
 
-//         await sendCommandToESP(deviceId, schedule.status);   // ← now awaits
-
-//     } catch (err) {
-//         console.error(`Reconciliation Error for ${deviceId}:`, err.message);
-//     }
-// };
-
-// const reconcileMissedCommands = async (deviceId, ws) => {
-//     try {
-//         const now = moment().tz("Asia/Karachi");
-
-//         // Find all schedules that are CURRENTLY "in progress"
-//         const activeSchedules = await scheduleModel.find({
-//             deviceId,
-//             startTime: { $lte: now.toDate() },     // started already
-//             endTime: { $gt: now.toDate() }      // NOT yet ended
-//         })
-//             .sort({ startTime: -1 })   // most recent schedule first
-//             .limit(1);
-
-//         if (activeSchedules.length === 0) {
-//             console.log(`🔄 Reconciliation: No active schedule in progress for ${deviceId}`);
-//             return;
-//         }
-
-//         const schedule = activeSchedules[0];
-//         const missedCommand = schedule.status;   // "ON" or "OFF" (your startAction)
-
-//         console.log(`🔄 Reconciliation: Device ${deviceId} reconnected during active schedule → sending missed command "${missedCommand}"`);
-
-//         // Reuse your existing function (it will find the connected client)
-//         const sent = sendCommandToESP(deviceId, missedCommand);
-
-//         if (sent) {
-//             console.log(`✅ Reconciliation SUCCESS: ${missedCommand} sent to ${deviceId}`);
-//         } else {
-//             console.warn(`⚠️ Reconciliation: Command could not be sent (very rare - socket closed instantly)`);
-//         }
+//         await sendCommandToESP(deviceId, activeSchedule.status);
 
 //     } catch (err) {
 //         console.error(`❌ Reconciliation Error for ${deviceId}:`, err.message);
 //     }
 // };
+
+
 
 module.exports = { schedulingSocket, sendCommandToESP };

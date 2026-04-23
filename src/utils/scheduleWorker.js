@@ -56,8 +56,8 @@
 
 // src/utils/scheduleWorker.js
 const path = require("path");
-require("dotenv").config({ 
-    path: path.resolve(__dirname, "../../.env") 
+require("dotenv").config({
+    path: path.resolve(__dirname, "../../.env")
 });
 
 const { Worker } = require("bullmq");
@@ -71,9 +71,11 @@ const worker = new Worker(
     "schedule-queue",
     async (job) => {
         const { deviceId, action } = job.data;
+        console.log("JOB DATA:", job.data);
         console.log(`🚀 Executing Job: ${deviceId} → ${action}`);
 
         try {
+            console.log("Calling API...");
             await axios.post("http://localhost:5051/schedule/trigger", {
                 deviceId,
                 action

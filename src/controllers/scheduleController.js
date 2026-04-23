@@ -1,203 +1,161 @@
-// // src/controllers/scheduleController.js
-// const scheduleModel = require("../models/scheduleModel");
-// const scheduleQueue = require("../utils/scheduleQueue");
-
-// const createSchedule = async (req, res) => {
-//     try {
-//         const { deviceId, startTime, endTime } = req.body;
-
-//         if (!deviceId || !startTime || !endTime) {
-//             return res.status(400).json({ message: "All fields required" });
-//         }
-
-//         const now = new Date();
-
-//         const startDelay = new Date(startTime) - now;
-//         const endDelay = new Date(endTime) - now;
-
-//         if (startDelay < 0 || endDelay < 0) {
-//             return res.status(400).json({ message: "Time must be future" });
-//         }
-
-//         // 🔥 Create Jobs (ON at start, OFF at end)
-
-//         const startJob = await scheduleQueue.add(
-//             "device-on",
-//             { deviceId, action: "ON" },
-//             { delay: startDelay }
-//         );
-
-//         const endJob = await scheduleQueue.add(
-//             "device-off",
-//             { deviceId, action: "OFF" },
-//             { delay: endDelay }
-//         );
-
-//         // Save in MongoDB
-//         const schedule = await scheduleModel.create({
-//             deviceId,
-//             startTime,
-//             endTime,
-//             status: "ON",
-//             startJobId: startJob.id,
-//             endJobId: endJob.id
-//         });
-
-//         res.status(201).json({
-//             message: "Schedule created",
-//             schedule
-//         });
-
-//     } catch (err) {
-//         res.status(500).json({ message: err.message });
-//     }
-// };
-
-// module.exports = { createSchedule };
-
-
-// src/controllers/scheduleController.js
-
 const scheduleModel = require("../models/scheduleModel");
+const { generateCron } = require("../utils/cronHelper");
 const scheduleQueue = require("../utils/scheduleQueue");
 const { sendCommandToESP } = require("../utils/schedulingSocket");
 
 // const createSchedule = async (req, res) => {
 //     try {
-//         const { deviceId, startTime, endTime, status } = req.body;
+//         const { deviceId, startTime, endTime } = req.body;
 
 //         // Validation
-//         if (!deviceId || !startTime || !endTime || !status) {
-//             return res.status(400).json({ message: "All fields are required: deviceId, startTime, endTime, status" });
-//         }
-
-//         if (!["ON", "OFF"].includes(status)) {
-//             return res.status(400).json({ message: "Status must be either 'ON' or 'OFF'" });
+//         if (!deviceId || !startTime || !endTime) {
+//             return res.status(400).json({ 
+//                 message: "All fields are required: deviceId, startTime, endTime" 
+//             });
 //         }
 
 //         const now = new Date();
-//         const startDelay = new Date(startTime) - now;
-//         const endDelay = new Date(endTime) - now;
+//         const startDate = new Date(startTime);
+//         const endDate = new Date(endTime);
+
+//         const startDelay = startDate - now;
+//         const endDelay = endDate - now;
 
 //         if (startDelay < 0 || endDelay < 0) {
-//             return res.status(400).json({ message: "startTime and endTime must be in the future" });
+//             return res.status(400).json({ 
+//                 message: "startTime and endTime must be in the future" 
+//             });
 //         }
 
-//         let startAction = status;           // User provided start action
-//         let endAction;
-
-//         // Decide end action based on your requirement
-//         if (status === "ON") {
-//             endAction = "OFF";              // Normal case: ON → OFF
-//         } else {
-//             endAction = "OFF";              // As you requested: OFF → OFF
+//         if (startDelay >= endDelay) {
+//             return res.status(400).json({ 
+//                 message: "endTime must be after startTime" 
+//             });
 //         }
 
-//         console.log(`📅 Scheduling: ${startAction} at ${startTime} | ${endAction} at ${endTime}`);
+//         console.log(`📅 Creating Schedule → ON at ${startTime} | OFF at ${endTime}`);
 
-//         // Create BullMQ Jobs
+//         // ==================== Create BullMQ Jobs ====================
 //         const startJob = await scheduleQueue.add(
 //             "device-control",
-//             { deviceId, action: startAction },
+//             { deviceId, action: "ON" },
 //             { delay: startDelay }
 //         );
 
 //         const endJob = await scheduleQueue.add(
 //             "device-control",
-//             { deviceId, action: endAction },
+//             { deviceId, action: "OFF" },
 //             { delay: endDelay }
 //         );
 
-//         // Save to MongoDB
+//         // ==================== Save to MongoDB ====================
 //         const schedule = await scheduleModel.create({
 //             deviceId,
-//             startTime,
-//             endTime,
-//             status: startAction,           // Save the user selected start status
+//             startTime: startDate,
+//             endTime: endDate,
+//             status: "ON",                    // Always ON as start action
 //             startJobId: startJob.id,
 //             endJobId: endJob.id
 //         });
 
 //         res.status(201).json({
-//             message: "Schedule created successfully",
+//             message: "Schedule created successfully (ON → OFF)",
 //             schedule
 //         });
 
 //     } catch (err) {
 //         console.error("Create Schedule Error:", err);
-//         res.status(500).json({ message: err.message });
+//         res.status(500).json({ 
+//             message: "Internal Server Error",
+//             error: err.message 
+//         });
 //     }
 // };
 
+// check the schedule on friday 9 5 on espdevice b ends on 9 10 
+// check the schedule on monday 9 10 on espdevice b ends on 9 10
 const createSchedule = async (req, res) => {
     try {
-        const { deviceId, startTime, endTime } = req.body;
+        const { deviceId, startTime, endTime, days } = req.body;
 
-        // Validation
-        if (!deviceId || !startTime || !endTime) {
-            return res.status(400).json({ 
-                message: "All fields are required: deviceId, startTime, endTime" 
+        if (!deviceId || !startTime || !endTime || !days?.length) {
+            return res.status(400).json({
+                message: "deviceId, startTime, endTime, days required"
             });
         }
 
-        const now = new Date();
-        const startDate = new Date(startTime);
-        const endDate = new Date(endTime);
+        const startCron = generateCron(startTime, days);
+        const endCron = generateCron(endTime, days);
 
-        const startDelay = startDate - now;
-        const endDelay = endDate - now;
+        const existing = await scheduleModel.findOne({
+            deviceId,
+            startCron,
+            endCron
+        });
 
-        if (startDelay < 0 || endDelay < 0) {
-            return res.status(400).json({ 
-                message: "startTime and endTime must be in the future" 
+        if (existing) {
+            return res.status(400).json({
+                message: "Schedule already exists"
             });
         }
 
-        if (startDelay >= endDelay) {
-            return res.status(400).json({ 
-                message: "endTime must be after startTime" 
-            });
-        }
+        console.log("Start Cron:", startCron);
+        console.log("End Cron:", endCron);
 
-        console.log(`📅 Creating Schedule → ON at ${startTime} | OFF at ${endTime}`);
 
-        // ==================== Create BullMQ Jobs ====================
-        const startJob = await scheduleQueue.add(
+        // 🔥 Create unique IDs (IMPORTANT)
+        const startJobId = `${deviceId}-ON-${startCron}`;
+        const endJobId = `${deviceId}-OFF-${endCron}`;
+
+        // 🔥 Add ON job
+        await scheduleQueue.add(
             "device-control",
             { deviceId, action: "ON" },
-            { delay: startDelay }
+            {
+                jobId: startJobId,
+                repeat: {
+                    pattern: startCron,
+                    tz: "UTC"
+                }
+            }
         );
 
-        const endJob = await scheduleQueue.add(
+        // 🔥 Add OFF job
+        await scheduleQueue.add(
             "device-control",
             { deviceId, action: "OFF" },
-            { delay: endDelay }
+            {
+                jobId: endJobId,
+                repeat: {
+                    pattern: endCron,
+                    tz: "UTC"
+                }
+            }
         );
 
-        // ==================== Save to MongoDB ====================
+        // ==================== SAVE IN MONGODB ====================
         const schedule = await scheduleModel.create({
             deviceId,
-            startTime: startDate,
-            endTime: endDate,
-            status: "ON",                    // Always ON as start action
-            startJobId: startJob.id,
-            endJobId: endJob.id
+            startTime,       // store as string "19:00"
+            endTime,         // store as string
+            days,            // ["monday", "wednesday"]
+            startCron,
+            endCron,
+            status: "ACTIVE",
+            startJobId,
+            endJobId
         });
 
         res.status(201).json({
-            message: "Schedule created successfully (ON → OFF)",
+            message: "✅ Recurring schedule created",
             schedule
         });
 
     } catch (err) {
-        console.error("Create Schedule Error:", err);
-        res.status(500).json({ 
-            message: "Internal Server Error",
-            error: err.message 
-        });
+        console.error(err);
+        res.status(500).json({ message: err.message });
     }
 };
-
 
 const eventTrigger = async (req, res) => {
     try {
@@ -211,6 +169,7 @@ const eventTrigger = async (req, res) => {
 
         // Call your WebSocket sender
         const success = sendCommandToESP(deviceId, action);
+        console.log("TRIGGER HIT:", req.body);
 
         if (success) {
             return res.json({ status: "sent" });
@@ -224,6 +183,34 @@ const eventTrigger = async (req, res) => {
             message: "Internal Server Error",
             error: error.message
         });
+    }
+};
+
+const deleteSchedule = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const schedule = await scheduleModel.findById(id);
+        if (!schedule) {
+            return res.status(404).json({ message: "Schedule not found" });
+        }
+
+        await scheduleQueue.removeRepeatable("device-control", {
+            pattern: schedule.startCron,
+            tz: "UTC"
+        });
+
+        await scheduleQueue.removeRepeatable("device-control", {
+            pattern: schedule.endCron,
+            tz: "UTC"
+        });
+
+        await schedule.deleteOne();
+
+        res.json({ message: "🗑️ Schedule deleted" });
+
+    } catch (err) {
+        res.status(500).json({ message: err.message });
     }
 };
 
