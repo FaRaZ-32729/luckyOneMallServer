@@ -94,7 +94,7 @@ server.on("upgrade", (req, socket, head) => {
     }
 });
 
-
+console.log(new Date().toUTCString());
 // Start server
 server.listen(port, () => {
     console.log(`Express & WebSocket is running on port : ${port}`);

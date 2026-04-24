@@ -110,7 +110,7 @@ const createSchedule = async (req, res) => {
 
         // 🔥 Add ON job
         await scheduleQueue.add(
-            "device-control",
+            "schedule-queue",
             { deviceId, action: "ON" },
             {
                 jobId: startJobId,
@@ -123,7 +123,7 @@ const createSchedule = async (req, res) => {
 
         // 🔥 Add OFF job
         await scheduleQueue.add(
-            "device-control",
+            "schedule-queue",
             { deviceId, action: "OFF" },
             {
                 jobId: endJobId,
@@ -269,6 +269,22 @@ const skipCurrentEvent = async (req, res) => {
     }
 };
 
+// disable and enable schedule
+const updateScheduleStatus = async (req, res) => {
+    const { scheduleId, status } = req.body;
+
+    if (!scheduleId || !["ACTIVE", "INACTIVE"].includes(status)) {
+        return res.status(400).json({ message: "Invalid data" });
+    }
+
+    await scheduleModel.updateOne(
+        { _id: scheduleId },
+        { status }
+    );
+
+    res.json({ message: `Schedule ${status === "ACTIVE" ? "enabled" : "disabled"}` });
+};
+
 const deleteSchedule = async (req, res) => {
     try {
         const { id } = req.params;
@@ -278,12 +294,12 @@ const deleteSchedule = async (req, res) => {
             return res.status(404).json({ message: "Schedule not found" });
         }
 
-        await scheduleQueue.removeRepeatable("device-control", {
+        await scheduleQueue.removeRepeatable("schedule-queue", {
             pattern: schedule.startCron,
             tz: "UTC"
         });
 
-        await scheduleQueue.removeRepeatable("device-control", {
+        await scheduleQueue.removeRepeatable("schedule-queue", {
             pattern: schedule.endCron,
             tz: "UTC"
         });
@@ -297,4 +313,4 @@ const deleteSchedule = async (req, res) => {
     }
 };
 
-module.exports = { createSchedule, eventTrigger, skipCurrentEvent };
+module.exports = { createSchedule, eventTrigger, skipCurrentEvent, updateScheduleStatus };

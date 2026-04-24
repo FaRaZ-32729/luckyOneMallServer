@@ -1,7 +1,7 @@
 // src/routes/scheduleRoutes.js
 const express = require("express");
 const router = express.Router();
-const { createSchedule, eventTrigger, skipCurrentEvent } = require("../controllers/scheduleController");
+const { createSchedule, eventTrigger, skipCurrentEvent, updateScheduleStatus } = require("../controllers/scheduleController");
 const authenticate = require("../middlewere/authMiddleware");
 
 // create the event 
@@ -10,5 +10,7 @@ router.post("/create", authenticate, createSchedule);
 router.post("/trigger", eventTrigger);
 // to skip current event    
 router.post("/skip-event", skipCurrentEvent);
+router.post("/update-status", updateScheduleStatus);
+
 
 module.exports = router;
