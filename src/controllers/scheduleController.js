@@ -1,6 +1,7 @@
 const scheduleModel = require("../models/scheduleModel");
-const { generateCron } = require("../utils/cronHelper");
+const scheduleSkipModel = require("../models/scheduleSkipModel");
 const scheduleQueue = require("../utils/scheduleQueue");
+const { generateCron } = require("../utils/cronHelper");
 const { sendCommandToESP } = require("../utils/schedulingSocket");
 
 // const createSchedule = async (req, res) => {
@@ -186,6 +187,88 @@ const eventTrigger = async (req, res) => {
     }
 };
 
+// skip event api
+const skipCurrentEvent = async (req, res) => {
+    try {
+        const { deviceId } = req.body;
+
+        if (!deviceId) {
+            return res.status(400).json({ message: "deviceId required" });
+        }
+
+        const now = new Date();
+        const todayDate = now.toISOString().split("T")[0];
+
+        const currentDay = now.getUTCDay();
+
+        const dayMapReverse = {
+            0: "sunday",
+            1: "monday",
+            2: "tuesday",
+            3: "wednesday",
+            4: "thursday",
+            5: "friday",
+            6: "saturday"
+        };
+
+        const today = dayMapReverse[currentDay];
+
+        const hours = String(now.getUTCHours()).padStart(2, "0");
+        const minutes = String(now.getUTCMinutes()).padStart(2, "0");
+        const currentTime = `${hours}:${minutes}`;
+
+        const schedules = await scheduleModel.find({
+            deviceId,
+            days: today,
+            status: "ACTIVE"
+        });
+
+        let activeSchedule = null;
+
+        for (const schedule of schedules) {
+            const { startTime, endTime } = schedule;
+
+            if (startTime < endTime) {
+                if (currentTime >= startTime && currentTime < endTime) {
+                    activeSchedule = schedule;
+                    break;
+                }
+            } else {
+                if (currentTime >= startTime || currentTime < endTime) {
+                    activeSchedule = schedule;
+                    break;
+                }
+            }
+        }
+
+        if (!activeSchedule) {
+            return res.status(400).json({
+                message: "No active event to skip"
+            });
+        }
+
+        // 🔥 Save skip
+        await scheduleSkipModel.create({
+            deviceId,
+            scheduleId: activeSchedule._id,
+            date: todayDate
+        });
+
+        // 🔥 IMMEDIATE EFFECT
+        await sendCommandToESP(deviceId, "OFF");
+
+        console.log("⛔ Event skipped + device turned OFF");
+
+        res.json({
+            message: "⛔ Event skipped and device turned OFF"
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: err.message });
+    }
+};
+
 const deleteSchedule = async (req, res) => {
     try {
         const { id } = req.params;
@@ -214,4 +297,4 @@ const deleteSchedule = async (req, res) => {
     }
 };
 
-module.exports = { createSchedule, eventTrigger };
+module.exports = { createSchedule, eventTrigger, skipCurrentEvent };

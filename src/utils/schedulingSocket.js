@@ -251,30 +251,6 @@ const sendCommandToESP = async (deviceId, status) => {
     return sent;
 };
 
-// const sendCommandToESP = (deviceId, status) => {
-//     if (!schedulingWss) return false;
-
-//     let sent = false;
-//     schedulingWss.clients.forEach((client) => {
-//         if (client.deviceId === deviceId && client.readyState === WebSocket.OPEN) {
-//             client.send(JSON.stringify({
-//                 type: "COMMAND",
-//                 command: status,
-//                 deviceId: deviceId,
-//                 timestamp: new Date().toISOString()
-//             }));
-//             console.log(`Command ${status} SENT to ${deviceId}`);
-//             sent = true;
-//         }
-//     });
-
-//     if (!sent) console.log(`Device ${deviceId} not connected`);
-//     return sent;
-// };
-
-// ====================== RECONCILIATION FUNCTION ======================
-
-
 const reconcileMissedCommands = async (deviceId, ws) => {
     try {
         const now = new Date();
@@ -349,6 +325,31 @@ const reconcileMissedCommands = async (deviceId, ws) => {
         console.error(`❌ Reconciliation Error for ${deviceId}:`, err.message);
     }
 };
+
+// const sendCommandToESP = (deviceId, status) => {
+//     if (!schedulingWss) return false;
+
+//     let sent = false;
+//     schedulingWss.clients.forEach((client) => {
+//         if (client.deviceId === deviceId && client.readyState === WebSocket.OPEN) {
+//             client.send(JSON.stringify({
+//                 type: "COMMAND",
+//                 command: status,
+//                 deviceId: deviceId,
+//                 timestamp: new Date().toISOString()
+//             }));
+//             console.log(`Command ${status} SENT to ${deviceId}`);
+//             sent = true;
+//         }
+//     });
+
+//     if (!sent) console.log(`Device ${deviceId} not connected`);
+//     return sent;
+// };
+
+// ====================== RECONCILIATION FUNCTION ======================
+
+
 
 
 // const reconcileMissedCommands = async (deviceId) => {
