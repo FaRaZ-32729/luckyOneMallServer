@@ -1,6 +1,6 @@
 const WebSocket = require("ws");
 const deviceModel = require("../models/deviceModel");
-const scheduleModel = require("../models/scheduleModel");
+const scheduleModel = require("../models/eventModel");
 
 let schedulingWss;
 
@@ -325,57 +325,6 @@ const reconcileMissedCommands = async (deviceId, ws) => {
         console.error(`❌ Reconciliation Error for ${deviceId}:`, err.message);
     }
 };
-
-// const sendCommandToESP = (deviceId, status) => {
-//     if (!schedulingWss) return false;
-
-//     let sent = false;
-//     schedulingWss.clients.forEach((client) => {
-//         if (client.deviceId === deviceId && client.readyState === WebSocket.OPEN) {
-//             client.send(JSON.stringify({
-//                 type: "COMMAND",
-//                 command: status,
-//                 deviceId: deviceId,
-//                 timestamp: new Date().toISOString()
-//             }));
-//             console.log(`Command ${status} SENT to ${deviceId}`);
-//             sent = true;
-//         }
-//     });
-
-//     if (!sent) console.log(`Device ${deviceId} not connected`);
-//     return sent;
-// };
-
-// ====================== RECONCILIATION FUNCTION ======================
-
-
-
-
-// const reconcileMissedCommands = async (deviceId) => {
-//     try {
-//         const now = new Date();
-
-//         const activeSchedule = await scheduleModel.findOne({
-//             deviceId,
-//             startTime: { $lte: now },
-//             endTime: { $gt: now }
-//         }).sort({ startTime: -1 });
-
-//         if (!activeSchedule) {
-//             console.log(`🔄 Reconciliation: No active schedule for ${deviceId}`);
-//             return;
-//         }
-
-//         console.log(`🔄 Reconciliation: Device ${deviceId} reconnected during active schedule → sending ${activeSchedule.status}`);
-
-//         await sendCommandToESP(deviceId, activeSchedule.status);
-
-//     } catch (err) {
-//         console.error(`❌ Reconciliation Error for ${deviceId}:`, err.message);
-//     }
-// };
-
 
 
 module.exports = { schedulingSocket, sendCommandToESP };

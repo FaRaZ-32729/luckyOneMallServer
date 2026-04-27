@@ -1,80 +1,9 @@
-const scheduleModel = require("../models/scheduleModel");
+const scheduleModel = require("../models/eventModel");
 const scheduleSkipModel = require("../models/scheduleSkipModel");
 const scheduleQueue = require("../utils/scheduleQueue");
 const { generateCron } = require("../utils/cronHelper");
 const { sendCommandToESP } = require("../utils/schedulingSocket");
 
-// const createSchedule = async (req, res) => {
-//     try {
-//         const { deviceId, startTime, endTime } = req.body;
-
-//         // Validation
-//         if (!deviceId || !startTime || !endTime) {
-//             return res.status(400).json({ 
-//                 message: "All fields are required: deviceId, startTime, endTime" 
-//             });
-//         }
-
-//         const now = new Date();
-//         const startDate = new Date(startTime);
-//         const endDate = new Date(endTime);
-
-//         const startDelay = startDate - now;
-//         const endDelay = endDate - now;
-
-//         if (startDelay < 0 || endDelay < 0) {
-//             return res.status(400).json({ 
-//                 message: "startTime and endTime must be in the future" 
-//             });
-//         }
-
-//         if (startDelay >= endDelay) {
-//             return res.status(400).json({ 
-//                 message: "endTime must be after startTime" 
-//             });
-//         }
-
-//         console.log(`📅 Creating Schedule → ON at ${startTime} | OFF at ${endTime}`);
-
-//         // ==================== Create BullMQ Jobs ====================
-//         const startJob = await scheduleQueue.add(
-//             "device-control",
-//             { deviceId, action: "ON" },
-//             { delay: startDelay }
-//         );
-
-//         const endJob = await scheduleQueue.add(
-//             "device-control",
-//             { deviceId, action: "OFF" },
-//             { delay: endDelay }
-//         );
-
-//         // ==================== Save to MongoDB ====================
-//         const schedule = await scheduleModel.create({
-//             deviceId,
-//             startTime: startDate,
-//             endTime: endDate,
-//             status: "ON",                    // Always ON as start action
-//             startJobId: startJob.id,
-//             endJobId: endJob.id
-//         });
-
-//         res.status(201).json({
-//             message: "Schedule created successfully (ON → OFF)",
-//             schedule
-//         });
-
-//     } catch (err) {
-//         console.error("Create Schedule Error:", err);
-//         res.status(500).json({ 
-//             message: "Internal Server Error",
-//             error: err.message 
-//         });
-//     }
-// };
-
-// check the schedule on friday 9 5 on espdevice b ends on 9 10 
-// check the schedule on monday 9 10 on espdevice b ends on 9 10
 const createSchedule = async (req, res) => {
     try {
         const { deviceId, startTime, endTime, days } = req.body;
@@ -271,18 +200,102 @@ const skipCurrentEvent = async (req, res) => {
 
 // disable and enable schedule
 const updateScheduleStatus = async (req, res) => {
-    const { scheduleId, status } = req.body;
+    try {
+        const { scheduleId, status } = req.body;
 
-    if (!scheduleId || !["ACTIVE", "INACTIVE"].includes(status)) {
-        return res.status(400).json({ message: "Invalid data" });
+        if (!scheduleId || !["ACTIVE", "INACTIVE"].includes(status)) {
+            return res.status(400).json({ message: "Invalid data" });
+        }
+
+        const updated = await scheduleModel.findByIdAndUpdate(
+            scheduleId,
+            { status },
+            { new: true }
+        );
+
+        if (!updated) {
+            return res.status(404).json({
+                message: "Schedule not found"
+            });
+        }
+
+        return res.json({
+            message: `Schedule ${status === "ACTIVE" ? "enabled" : "disabled"}`,
+            schedule: updated
+        });
+
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ message: err.message });
     }
+};
 
-    await scheduleModel.updateOne(
-        { _id: scheduleId },
-        { status }
-    );
+const getAllSchedules = async (req, res) => {
+    try {
+        const schedules = await scheduleModel.find().sort({ createdAt: -1 });
 
-    res.json({ message: `Schedule ${status === "ACTIVE" ? "enabled" : "disabled"}` });
+        if (!schedules) {
+            return res.status(401).json({ message: "No Events To Show" })
+        }
+
+        return res.status(200).json({
+            count: schedules.length,
+            schedules
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: err.message });
+    }
+};
+
+const getScheduleById = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!id) {
+            return res.status(404).json({
+                message: "Id required"
+            });
+        }
+
+        const schedule = await scheduleModel.findById(id);
+
+        if (!schedule) {
+            return res.status(404).json({
+                message: "Schedule not found"
+            });
+        }
+
+        return res.status(200).json(schedule);
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: err.message });
+    }
+};
+
+const getSchedulesByDevice = async (req, res) => {
+    try {
+        const { deviceId } = req.params;
+
+        if (!deviceId) {
+            return res.status(400).json({
+                message: "deviceId required"
+            });
+        }
+
+        const schedules = await scheduleModel.find({ deviceId });
+
+        return res.status(200).json({
+            count: schedules.length,
+            schedules
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: err.message });
+    }
 };
 
 const deleteSchedule = async (req, res) => {
@@ -290,27 +303,133 @@ const deleteSchedule = async (req, res) => {
         const { id } = req.params;
 
         const schedule = await scheduleModel.findById(id);
+
         if (!schedule) {
-            return res.status(404).json({ message: "Schedule not found" });
+            return res.status(404).json({
+                message: "Schedule not found"
+            });
         }
 
+        // 🔥 Remove repeat jobs from BullMQ
         await scheduleQueue.removeRepeatable("schedule-queue", {
+            jobId: schedule.startJobId,
             pattern: schedule.startCron,
             tz: "UTC"
         });
 
         await scheduleQueue.removeRepeatable("schedule-queue", {
+            jobId: schedule.endJobId,
             pattern: schedule.endCron,
             tz: "UTC"
         });
 
+        // 🔥 Delete from DB
         await schedule.deleteOne();
 
-        res.json({ message: "🗑️ Schedule deleted" });
+        res.status(200).json({
+            message: "Schedule deleted successfully"
+        });
 
     } catch (err) {
+        console.error(err);
         res.status(500).json({ message: err.message });
     }
 };
 
-module.exports = { createSchedule, eventTrigger, skipCurrentEvent, updateScheduleStatus };
+const getCurrentOrNextSchedule = async (req, res) => {
+    try {
+        const { deviceId } = req.params;
+
+        if (!deviceId) {
+            return res.status(400).json({
+                message: "deviceId required"
+            });
+        }
+
+        const now = new Date();
+
+        const currentDay = now.getUTCDay();
+
+        const dayMapReverse = {
+            0: "sunday",
+            1: "monday",
+            2: "tuesday",
+            3: "wednesday",
+            4: "thursday",
+            5: "friday",
+            6: "saturday"
+        };
+
+        const today = dayMapReverse[currentDay];
+
+        const hours = String(now.getUTCHours()).padStart(2, "0");
+        const minutes = String(now.getUTCMinutes()).padStart(2, "0");
+        const currentTime = `${hours}:${minutes}`;
+
+        const schedules = await scheduleModel.find({
+            deviceId,
+            status: "ACTIVE"
+        });
+
+        let active = null;
+        let upcoming = null;
+
+        for (const schedule of schedules) {
+
+            const daysMatch = schedule.days.includes(today);
+
+            if (daysMatch) {
+                const { startTime, endTime } = schedule;
+
+                // 🔥 ACTIVE CHECK
+                if (startTime < endTime) {
+                    if (currentTime >= startTime && currentTime < endTime) {
+                        active = schedule;
+                    }
+                } else {
+                    if (currentTime >= startTime || currentTime < endTime) {
+                        active = schedule;
+                    }
+                }
+            }
+
+            // 🔥 FIND NEXT UPCOMING EVENT
+            const todayMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+            const [sHour, sMin] = schedule.startTime.split(":");
+            const startMinutes = parseInt(sHour) * 60 + parseInt(sMin);
+
+            if (startMinutes > todayMinutes) {
+                if (!upcoming || startMinutes < upcoming.startMinutes) {
+                    upcoming = {
+                        ...schedule._doc,
+                        startMinutes
+                    };
+                }
+            }
+        }
+
+        if (active) {
+            return res.status(200).json({
+                type: "CURRENT",
+                event: active
+            });
+        }
+
+        if (upcoming) {
+            return res.status(200).json({
+                type: "NEXT",
+                event: upcoming
+            });
+        }
+
+        return res.status(200).json({
+            message: "No event to show"
+        });
+
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ message: err.message });
+    }
+};
+
+module.exports = { createSchedule, eventTrigger, skipCurrentEvent, updateScheduleStatus, getAllSchedules, getScheduleById, getSchedulesByDevice, deleteSchedule, getCurrentOrNextSchedule };

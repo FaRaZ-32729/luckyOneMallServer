@@ -14,7 +14,7 @@ const authRouter = require("./src/routes/authRouter");
 const venueRouter = require("./src/routes/venueRouter");
 const deviceRouter = require("./src/routes/deviceRouter");
 const alertsRouter = require("./src/routes/alertsRouter");
-const scheduleRoutes = require("./src/routes/scheduleRoutes");
+const scheduleRoutes = require("./src/routes/eventRoutes");
 const authenticate = require("./src/middlewere/authMiddleware");
 
 
@@ -66,7 +66,7 @@ app.use("/organization", authenticate, orgRouter);
 app.use("/venue", authenticate, venueRouter);
 app.use("/device", authenticate, deviceRouter);
 app.use("/alert", authenticate, alertsRouter);
-app.use("/schedule", scheduleRoutes);
+app.use("/event", scheduleRoutes);
 
 app.get("/", (req, res) => {
     res.send("Hellow FaRaZ to IOTFIY-LuckyOne");
