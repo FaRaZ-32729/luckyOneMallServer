@@ -66,6 +66,15 @@ mongoose.connect(process.env.MONGODB_URL)
     .then(() => console.log("✅ Worker MongoDB Connected"))
     .catch(err => console.error("❌ Worker DB Error:", err));
 
+
+if (!process.env.BASE_URL) {
+    throw new Error("BASE_URL is not defined in .env");
+}
+
+const url = `${process.env.BASE_URL}/schedule/trigger`;
+
+console.log(`url loaded successfully`, url)
+
 const worker = new Worker(
     "schedule-queue",
     async (job) => {
@@ -157,7 +166,8 @@ const worker = new Worker(
 
             // ==================== EXISTING FLOW ====================
             console.log("Calling API...");
-            await axios.post("http://localhost:5051/schedule/trigger", {
+
+            await axios.post(url, {
                 deviceId,
                 action
             }, {
