@@ -4,7 +4,7 @@ Dump ALL databases
 mongodump --uri="mongodb+srv://user:pass@cluster.mongodb.net" --out=backup
 
 Dump ONE database
-mongodump --uri="mongodb+srv://user:pass@cluster.mongodb.net/your-db-name" --out=backup
+mongodump --uri="MONGODB_URL=mongodb+srv://faraz_32729:farazMongodb@cluster0.mrwq60z.mongodb.net/luckyOneMall" --out=backup
 
 Dump ONE collection
 mongodump \

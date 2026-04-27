@@ -62,7 +62,6 @@ console.log("🚀 Schedule Worker Starting...");
 console.log("REDIS_URL Loaded:", process.env.REDIS_URL ? "✅ YES" : "❌ NO");
 
 
-
 mongoose.connect(process.env.MONGODB_URL)
     .then(() => console.log("✅ Worker MongoDB Connected"))
     .catch(err => console.error("❌ Worker DB Error:", err));
@@ -150,6 +149,11 @@ const worker = new Worker(
                 }
             }
             // ==================== 🔥 SKIP LOGIC END ====================
+            if (!matchedSchedule) {
+                console.log(`⛔ No ACTIVE schedule matched → skipping ${action} for ${deviceId}`);
+                return;
+            }
+
 
             // ==================== EXISTING FLOW ====================
             console.log("Calling API...");

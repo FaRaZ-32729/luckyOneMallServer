@@ -4,11 +4,13 @@
 #include <time.h>
 
 // ================== WiFi Credentials ==================
-const char* ssid = "Office-Wifi";
-const char* password = "ICT@Lucky";
+// const char* ssid = "Office-Wifi";
+const char* ssid = "FaRaZ";
+// const char* password = "ICT@Lucky";
+const char* password = "faraz32729";
 
 // ================== Server Details ==================
-const char* websocket_server = "192.168.137.165";
+const char* websocket_server = "10.25.153.154";
 const int websocket_port = 5051;
 const char* websocket_path = "/ws/scheduling";
 
