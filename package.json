@@ -4,9 +4,9 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "start": "concurrently -n \"SERVER,WORKER\" -c \"green,blue\" \"nodemon server.js\" \"nodemon src/utils/scheduleWorker.js\"",
-    "dev": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "worker": "node src/utils/scheduleWorker.js",
+    "dev": "nodemon server.js"
   },
   "keywords": [],
   "author": "",
