@@ -1,6 +1,7 @@
 const WebSocket = require("ws");
 const deviceModel = require("../models/deviceModel");
 const scheduleModel = require("../models/eventModel");
+const deviceSwitchModel = require("../models/deviceSwitchModel");
 
 let schedulingWss;
 
@@ -49,8 +50,33 @@ const schedulingSocket = (server) => {
             ws.deviceId = data.deviceId;
 
             // ==================== IGNORE ACK / CONTROL RESPONSES ====================
+            // if (data.ack) {
+            //     console.log("⏭ ACK received, skipping DB update");
+            //     return;
+            // }
+            // ================== ACK HANDLING (IMPORTANT FIX) ==================
             if (data.ack) {
-                console.log("⏭ ACK received, skipping DB update");
+                console.log("ACK received from ESP:", data);
+
+                try {
+                    await deviceSwitchModel.findOneAndUpdate(
+                        { deviceId: data.deviceId },
+                        {
+                            deviceId: data.deviceId,
+                            status: data.status,
+                            lastChangedAt: new Date()
+                        },
+                        {
+                            new: true,
+                            upsert: true
+                        }
+                    );
+
+                    console.log("DB updated from ACK");
+                } catch (err) {
+                    console.error("ACK DB update error:", err.message);
+                }
+
                 return;
             }
 

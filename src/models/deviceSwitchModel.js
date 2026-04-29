@@ -1,12 +1,6 @@
 const mongoose = require("mongoose");
 
 const deviceSwitchSchema = new mongoose.Schema({
-    device: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Device",
-        required: true,
-        unique: true // one control per device
-    },
 
     deviceId: {
         type: String,

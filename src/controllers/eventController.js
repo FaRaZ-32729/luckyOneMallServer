@@ -3,6 +3,7 @@ const scheduleSkipModel = require("../models/scheduleSkipModel");
 const scheduleQueue = require("../utils/scheduleQueue");
 const { generateCron } = require("../utils/cronHelper");
 const { sendCommandToESP } = require("../utils/schedulingSocket");
+const deviceModel = require("../models/deviceModel");
 
 const createSchedule = async (req, res) => {
     try {
@@ -87,6 +88,7 @@ const createSchedule = async (req, res) => {
     }
 };
 
+// for backend use only
 const eventTrigger = async (req, res) => {
     try {
         const { deviceId, action } = req.body;
@@ -112,6 +114,85 @@ const eventTrigger = async (req, res) => {
         return res.status(500).json({
             message: "Internal Server Error",
             error: error.message
+        });
+    }
+};
+
+// toggle button api 
+const toggleDeviceSwitch = async (req, res) => {
+    try {
+        const { deviceId, status } = req.body;
+
+        if (!deviceId || !status) {
+            return res.status(400).json({
+                message: "deviceId and status are required"
+            });
+        }
+
+        if (!["ON", "OFF"].includes(status)) {
+            return res.status(400).json({
+                message: "Status must be ON or OFF"
+            });
+        }
+
+        // Check device exists
+        const device = await deviceModel.findOne({ deviceId });
+        if (!device) {
+            return res.status(404).json({ message: "Device not found" });
+        }
+
+        // Optional: restrict only SD devices
+        if (!["ESD", "TSD"].includes(device.deviceType)) {
+            return res.status(400).json({
+                message: "Only Scheduler Devices can be controlled"
+            });
+        }
+
+        // === SEND COMMAND TO ESP32 ===
+        const commandSent = await sendCommandToESP(deviceId, status);
+
+        return res.status(200).json({
+            note: commandSent
+                ? "Command sent to device successfully"
+                : "Device is offline"
+        });
+
+
+    } catch (error) {
+        console.error("Error controlling device:", error);
+        res.status(500).json({ message: "Internal Server Error" });
+    }
+};
+
+// get off/on status of the device 
+const getDeviceStatus = async (req, res) => {
+    try {
+        const { deviceId } = req.params;
+
+        if (!deviceId) {
+            return res.status(400).json({
+                message: "deviceId is required"
+            });
+        }
+
+        const deviceStatus = await deviceSwitchModel.findOne({ deviceId });
+
+        if (!deviceStatus) {
+            return res.status(404).json({
+                message: "No status found for this device"
+            });
+        }
+
+        return res.status(200).json({
+            deviceId: deviceStatus.deviceId,
+            status: deviceStatus.status,
+            lastChangedAt: deviceStatus.lastChangedAt
+        });
+
+    } catch (error) {
+        console.error("Error fetching device status:", error);
+        return res.status(500).json({
+            message: "Internal Server Error"
         });
     }
 };
@@ -432,4 +513,4 @@ const getCurrentOrNextSchedule = async (req, res) => {
     }
 };
 
-module.exports = { createSchedule, eventTrigger, skipCurrentEvent, updateScheduleStatus, getAllSchedules, getScheduleById, getSchedulesByDevice, deleteSchedule, getCurrentOrNextSchedule };
+module.exports = { createSchedule, eventTrigger, skipCurrentEvent, updateScheduleStatus, getAllSchedules, getScheduleById, getSchedulesByDevice, toggleDeviceSwitch, deleteSchedule, getCurrentOrNextSchedule, getDeviceStatus };
