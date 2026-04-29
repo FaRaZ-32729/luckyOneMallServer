@@ -419,74 +419,176 @@ const deleteSchedule = async (req, res) => {
     }
 };
 
+// const getCurrentOrNextSchedule = async (req, res) => {
+//     try {
+//         const { deviceId } = req.params;
+
+//         if (!deviceId) {
+//             return res.status(400).json({
+//                 message: "deviceId required"
+//             });
+//         }
+
+//         const now = new Date();
+
+//         const currentDay = now.getUTCDay();
+
+//         const dayMapReverse = {
+//             0: "sunday",
+//             1: "monday",
+//             2: "tuesday",
+//             3: "wednesday",
+//             4: "thursday",
+//             5: "friday",
+//             6: "saturday"
+//         };
+
+//         const today = dayMapReverse[currentDay];
+
+//         const hours = String(now.getUTCHours()).padStart(2, "0");
+//         const minutes = String(now.getUTCMinutes()).padStart(2, "0");
+//         const currentTime = `${hours}:${minutes}`;
+
+//         const schedules = await scheduleModel.find({
+//             deviceId,
+//             status: "ACTIVE"
+//         });
+
+//         let active = null;
+//         let upcoming = null;
+
+//         for (const schedule of schedules) {
+
+//             const daysMatch = schedule.days.includes(today);
+
+//             if (daysMatch) {
+//                 const { startTime, endTime } = schedule;
+
+//                 // 🔥 ACTIVE CHECK
+//                 if (startTime < endTime) {
+//                     if (currentTime >= startTime && currentTime < endTime) {
+//                         active = schedule;
+//                     }
+//                 } else {
+//                     if (currentTime >= startTime || currentTime < endTime) {
+//                         active = schedule;
+//                     }
+//                 }
+//             }
+
+//             // 🔥 FIND NEXT UPCOMING EVENT
+//             const todayMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+//             const [sHour, sMin] = schedule.startTime.split(":");
+//             const startMinutes = parseInt(sHour) * 60 + parseInt(sMin);
+
+//             if (startMinutes > todayMinutes) {
+//                 if (!upcoming || startMinutes < upcoming.startMinutes) {
+//                     upcoming = {
+//                         ...schedule._doc,
+//                         startMinutes
+//                     };
+//                 }
+//             }
+//         }
+
+//         if (active) {
+//             return res.status(200).json({
+//                 type: "CURRENT",
+//                 event: active
+//             });
+//         }
+
+//         if (upcoming) {
+//             return res.status(200).json({
+//                 type: "NEXT",
+//                 event: upcoming
+//             });
+//         }
+
+//         return res.status(200).json({
+//             message: "No event to show"
+//         });
+
+//     } catch (err) {
+//         console.error(err);
+//         return res.status(500).json({ message: err.message });
+//     }
+// };
 const getCurrentOrNextSchedule = async (req, res) => {
     try {
         const { deviceId } = req.params;
 
         if (!deviceId) {
-            return res.status(400).json({
-                message: "deviceId required"
-            });
+            return res.status(400).json({ message: "deviceId required" });
         }
 
         const now = new Date();
-
+        const todayDate = now.toISOString().split("T")[0];        // e.g., "2026-04-30"
         const currentDay = now.getUTCDay();
 
         const dayMapReverse = {
-            0: "sunday",
-            1: "monday",
-            2: "tuesday",
-            3: "wednesday",
-            4: "thursday",
-            5: "friday",
-            6: "saturday"
+            0: "sunday", 1: "monday", 2: "tuesday", 3: "wednesday",
+            4: "thursday", 5: "friday", 6: "saturday"
         };
 
         const today = dayMapReverse[currentDay];
+        const currentTime = `${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
 
-        const hours = String(now.getUTCHours()).padStart(2, "0");
-        const minutes = String(now.getUTCMinutes()).padStart(2, "0");
-        const currentTime = `${hours}:${minutes}`;
-
+        // Get all active schedules for this device
         const schedules = await scheduleModel.find({
             deviceId,
             status: "ACTIVE"
+        });
+
+        // Check if any event was skipped TODAY
+        const skippedRecord = await scheduleSkipModel.findOne({
+            deviceId,
+            date: todayDate
         });
 
         let active = null;
         let upcoming = null;
 
         for (const schedule of schedules) {
-
             const daysMatch = schedule.days.includes(today);
+            if (!daysMatch) continue;
 
-            if (daysMatch) {
-                const { startTime, endTime } = schedule;
+            const { startTime, endTime } = schedule;
 
-                // 🔥 ACTIVE CHECK
-                if (startTime < endTime) {
-                    if (currentTime >= startTime && currentTime < endTime) {
-                        active = schedule;
-                    }
-                } else {
-                    if (currentTime >= startTime || currentTime < endTime) {
-                        active = schedule;
-                    }
+            // Check if this specific schedule was skipped today
+            const isThisScheduleSkipped = skippedRecord &&
+                skippedRecord.scheduleId.toString() === schedule._id.toString();
+
+            // === CURRENT EVENT CHECK ===
+            let isCurrentlyActive = false;
+
+            if (startTime < endTime) {
+                if (currentTime >= startTime && currentTime < endTime) {
+                    isCurrentlyActive = true;
+                }
+            } else {
+                if (currentTime >= startTime || currentTime < endTime) {
+                    isCurrentlyActive = true;
                 }
             }
 
-            // 🔥 FIND NEXT UPCOMING EVENT
+            if (isCurrentlyActive) {
+                if (isThisScheduleSkipped) {
+                    console.log(`[Skipped] Event for ${deviceId} was skipped today`);
+                    continue;                    // Skip this event - user already skipped it
+                }
+                active = schedule;
+                break;
+            }
+
+            // === UPCOMING EVENT ===
             const todayMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
             const [sHour, sMin] = schedule.startTime.split(":");
             const startMinutes = parseInt(sHour) * 60 + parseInt(sMin);
 
             if (startMinutes > todayMinutes) {
                 if (!upcoming || startMinutes < upcoming.startMinutes) {
-                    upcoming = {
-                        ...schedule._doc,
-                        startMinutes
-                    };
+                    upcoming = { ...schedule._doc, startMinutes };
                 }
             }
         }
@@ -506,7 +608,8 @@ const getCurrentOrNextSchedule = async (req, res) => {
         }
 
         return res.status(200).json({
-            message: "No event to show"
+            type: "NO_EVENT",
+            message: "No active or upcoming event"
         });
 
     } catch (err) {
