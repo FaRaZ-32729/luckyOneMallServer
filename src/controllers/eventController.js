@@ -4,6 +4,7 @@ const scheduleQueue = require("../utils/scheduleQueue");
 const { generateCron } = require("../utils/cronHelper");
 const { sendCommandToESP } = require("../utils/schedulingSocket");
 const deviceModel = require("../models/deviceModel");
+const deviceSwitchModel = require("../models/deviceSwitchModel");
 
 const createSchedule = async (req, res) => {
     try {
@@ -176,7 +177,7 @@ const getDeviceStatus = async (req, res) => {
         }
 
         const deviceStatus = await deviceSwitchModel.findOne({ deviceId });
-        
+
 
         if (!deviceStatus) {
             return res.status(404).json({
