@@ -176,6 +176,7 @@ const getDeviceStatus = async (req, res) => {
         }
 
         const deviceStatus = await deviceSwitchModel.findOne({ deviceId });
+        
 
         if (!deviceStatus) {
             return res.status(404).json({
