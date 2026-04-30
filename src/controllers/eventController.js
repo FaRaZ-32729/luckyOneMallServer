@@ -259,6 +259,8 @@ const skipCurrentEvent = async (req, res) => {
             });
         }
 
+        await scheduleSkipModel.deleteMany({ deviceId });
+        
         // 🔥 Save skip
         await scheduleSkipModel.create({
             deviceId,

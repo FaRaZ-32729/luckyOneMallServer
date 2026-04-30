@@ -345,6 +345,19 @@ const reconcileMissedCommands = async (deviceId, ws) => {
 
         console.log(`🔄 Device ${deviceId} is INSIDE schedule → sending ON`);
 
+        const todayDate = now.toISOString().split("T")[0];
+
+        const skipped = await scheduleSkipModel.findOne({
+            deviceId,
+            scheduleId: activeSchedule._id,
+            date: todayDate
+        });
+
+        if (skipped) {
+            console.log(`⛔ Event already skipped for device ${deviceId} → NOT sending ON`);
+            return; 
+        }
+
         await sendCommandToESP(deviceId, "ON");
 
     } catch (err) {
