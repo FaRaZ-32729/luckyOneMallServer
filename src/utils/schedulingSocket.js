@@ -2,6 +2,7 @@ const WebSocket = require("ws");
 const deviceModel = require("../models/deviceModel");
 const scheduleModel = require("../models/eventModel");
 const deviceSwitchModel = require("../models/deviceSwitchModel");
+const scheduleSkipModel = require("../models/scheduleSkipModel");
 
 let schedulingWss;
 
