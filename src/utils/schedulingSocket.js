@@ -3,6 +3,7 @@ const deviceModel = require("../models/deviceModel");
 const scheduleModel = require("../models/eventModel");
 const deviceSwitchModel = require("../models/deviceSwitchModel");
 const scheduleSkipModel = require("../models/scheduleSkipModel");
+const { getScheduleDaysForCheck, isOvernight } = require("./scheduleHelpers");
 
 let schedulingWss;
 
@@ -281,73 +282,66 @@ const sendCommandToESP = async (deviceId, status) => {
 const reconcileMissedCommands = async (deviceId, ws) => {
     try {
         const now = new Date();
+        const todayDate = now.toISOString().split("T")[0];
 
-        // ✅ Get UTC day (0–6)
         const currentDay = now.getUTCDay();
-
-        // Map to string (same as your DB)
         const dayMapReverse = {
-            0: "sunday",
-            1: "monday",
-            2: "tuesday",
-            3: "wednesday",
-            4: "thursday",
-            5: "friday",
-            6: "saturday"
+            0: "sunday", 1: "monday", 2: "tuesday", 3: "wednesday",
+            4: "thursday", 5: "friday", 6: "saturday"
         };
 
         const today = dayMapReverse[currentDay];
+        const currentTime = `${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
 
-        // ✅ Get current UTC time in HH:mm
-        const hours = String(now.getUTCHours()).padStart(2, "0");
-        const minutes = String(now.getUTCMinutes()).padStart(2, "0");
-        const currentTime = `${hours}:${minutes}`;
-
-        // 🔥 Find schedules for today
+        // Get ALL active schedules (don't filter by day here)
         const schedules = await scheduleModel.find({
             deviceId,
-            days: today,
             status: "ACTIVE"
         });
 
         if (!schedules.length) {
-            console.log(`🔄 No schedule for today (${today})`);
+            console.log(`🔄 No active schedules found for device ${deviceId}`);
             return;
         }
 
-        // 🔥 Check if current time falls in any schedule
         let activeSchedule = null;
 
         for (const schedule of schedules) {
-            const { startTime, endTime } = schedule;
+            const relevantDays = getScheduleDaysForCheck(schedule);
 
-            // Handle normal case
-            if (startTime < endTime) {
+            // Skip if today is not part of this schedule (including overnight)
+            if (!relevantDays.includes(today)) continue;
+
+            const { startTime, endTime } = schedule;
+            const isOvernightSchedule = isOvernight(startTime, endTime);
+
+            let isCurrentlyActive = false;
+
+            if (!isOvernightSchedule) {
                 if (currentTime >= startTime && currentTime < endTime) {
-                    activeSchedule = schedule;
-                    break;
+                    isCurrentlyActive = true;
+                }
+            } else {
+                // Overnight schedule
+                if (currentTime >= startTime || currentTime < endTime) {
+                    isCurrentlyActive = true;
                 }
             }
-            // 🔥 Handle midnight crossover (IMPORTANT)
-            else {
-                if (
-                    currentTime >= startTime || currentTime < endTime
-                ) {
-                    activeSchedule = schedule;
-                    break;
-                }
+
+            if (isCurrentlyActive) {
+                activeSchedule = schedule;
+                break;
             }
         }
 
         if (!activeSchedule) {
-            console.log(`🔄 Device ${deviceId} is currently OUTSIDE schedule`);
+            console.log(`🔄 Device ${deviceId} is currently OUTSIDE any schedule window`);
             return;
         }
 
-        console.log(`🔄 Device ${deviceId} is INSIDE schedule → sending ON`);
+        console.log(`🔄 Device ${deviceId} is INSIDE schedule → checking skip status`);
 
-        const todayDate = now.toISOString().split("T")[0];
-
+        // Check if user skipped this schedule today
         const skipped = await scheduleSkipModel.findOne({
             deviceId,
             scheduleId: activeSchedule._id,
@@ -355,16 +349,106 @@ const reconcileMissedCommands = async (deviceId, ws) => {
         });
 
         if (skipped) {
-            console.log(`⛔ Event already skipped for device ${deviceId} → NOT sending ON`);
-            return; 
+            console.log(`⛔ Event was skipped today for device ${deviceId} → NOT sending ON`);
+            return;
         }
 
+        // Send ON command to sync device state
+        console.log(`✅ Sending ON command to device ${deviceId} (reconciliation)`);
         await sendCommandToESP(deviceId, "ON");
 
     } catch (err) {
         console.error(`❌ Reconciliation Error for ${deviceId}:`, err.message);
     }
 };
+
+// const reconcileMissedCommands = async (deviceId, ws) => {
+//     try {
+//         const now = new Date();
+
+//         // ✅ Get UTC day (0–6)
+//         const currentDay = now.getUTCDay();
+
+//         // Map to string (same as your DB)
+//         const dayMapReverse = {
+//             0: "sunday",
+//             1: "monday",
+//             2: "tuesday",
+//             3: "wednesday",
+//             4: "thursday",
+//             5: "friday",
+//             6: "saturday"
+//         };
+
+//         const today = dayMapReverse[currentDay];
+
+//         // ✅ Get current UTC time in HH:mm
+//         const hours = String(now.getUTCHours()).padStart(2, "0");
+//         const minutes = String(now.getUTCMinutes()).padStart(2, "0");
+//         const currentTime = `${hours}:${minutes}`;
+
+//         // 🔥 Find schedules for today
+//         const schedules = await scheduleModel.find({
+//             deviceId,
+//             days: today,
+//             status: "ACTIVE"
+//         });
+
+//         if (!schedules.length) {
+//             console.log(`🔄 No schedule for today (${today})`);
+//             return;
+//         }
+
+//         // 🔥 Check if current time falls in any schedule
+//         let activeSchedule = null;
+
+//         for (const schedule of schedules) {
+//             const { startTime, endTime } = schedule;
+
+//             // Handle normal case
+//             if (startTime < endTime) {
+//                 if (currentTime >= startTime && currentTime < endTime) {
+//                     activeSchedule = schedule;
+//                     break;
+//                 }
+//             }
+//             // 🔥 Handle midnight crossover (IMPORTANT)
+//             else {
+//                 if (
+//                     currentTime >= startTime || currentTime < endTime
+//                 ) {
+//                     activeSchedule = schedule;
+//                     break;
+//                 }
+//             }
+//         }
+
+//         if (!activeSchedule) {
+//             console.log(`🔄 Device ${deviceId} is currently OUTSIDE schedule`);
+//             return;
+//         }
+
+//         console.log(`🔄 Device ${deviceId} is INSIDE schedule → sending ON`);
+
+//         const todayDate = now.toISOString().split("T")[0];
+
+//         const skipped = await scheduleSkipModel.findOne({
+//             deviceId,
+//             scheduleId: activeSchedule._id,
+//             date: todayDate
+//         });
+
+//         if (skipped) {
+//             console.log(`⛔ Event already skipped for device ${deviceId} → NOT sending ON`);
+//             return; 
+//         }
+
+//         await sendCommandToESP(deviceId, "ON");
+
+//     } catch (err) {
+//         console.error(`❌ Reconciliation Error for ${deviceId}:`, err.message);
+//     }
+// };
 
 
 module.exports = { schedulingSocket, sendCommandToESP };

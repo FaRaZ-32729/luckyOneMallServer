@@ -5,6 +5,7 @@ const { generateCron } = require("../utils/cronHelper");
 const { sendCommandToESP } = require("../utils/schedulingSocket");
 const deviceModel = require("../models/deviceModel");
 const deviceSwitchModel = require("../models/deviceSwitchModel");
+const { isOvernight, getScheduleDaysForCheck } = require("../utils/scheduleHelpers");
 
 const createSchedule = async (req, res) => {
     try {
@@ -20,21 +21,16 @@ const createSchedule = async (req, res) => {
 
         let endDays = [...days];
 
-        // 🔥 if overnight → shift OFF to next day
-        if (startTime > endTime) {
+        // 🔥 Handle overnight schedules
+        if (isOvernight(startTime, endTime)) {
             const dayOrder = [
-                "sunday",
-                "monday",
-                "tuesday",
-                "wednesday",
-                "thursday",
-                "friday",
-                "saturday"
+                "sunday", "monday", "tuesday", "wednesday",
+                "thursday", "friday", "saturday"
             ];
 
             endDays = days.map(d => {
-                const idx = dayOrder.indexOf(d.toLowerCase());
-                return dayOrder[(idx + 1) % 7]; // next day
+                const idx = dayOrder.indexOf(d.toLowerCase().trim());
+                return dayOrder[(idx + 1) % 7];
             });
         }
 
@@ -227,85 +223,150 @@ const getDeviceStatus = async (req, res) => {
 const skipCurrentEvent = async (req, res) => {
     try {
         const { deviceId } = req.body;
-
-        if (!deviceId) {
-            return res.status(400).json({ message: "deviceId required" });
-        }
+        if (!deviceId) return res.status(400).json({ message: "deviceId required" });
 
         const now = new Date();
         const todayDate = now.toISOString().split("T")[0];
-
         const currentDay = now.getUTCDay();
 
         const dayMapReverse = {
-            0: "sunday",
-            1: "monday",
-            2: "tuesday",
-            3: "wednesday",
-            4: "thursday",
-            5: "friday",
-            6: "saturday"
+            0: "sunday", 1: "monday", 2: "tuesday", 3: "wednesday",
+            4: "thursday", 5: "friday", 6: "saturday"
         };
 
         const today = dayMapReverse[currentDay];
+        const currentTime = `${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
 
-        const hours = String(now.getUTCHours()).padStart(2, "0");
-        const minutes = String(now.getUTCMinutes()).padStart(2, "0");
-        const currentTime = `${hours}:${minutes}`;
-
-        const schedules = await scheduleModel.find({
-            deviceId,
-            days: today,
-            status: "ACTIVE"
-        });
+        const schedules = await scheduleModel.find({ deviceId, status: "ACTIVE" });
 
         let activeSchedule = null;
 
         for (const schedule of schedules) {
-            const { startTime, endTime } = schedule;
+            const relevantDays = getScheduleDaysForCheck(schedule);
+            if (!relevantDays.includes(today)) continue;
 
-            if (startTime < endTime) {
-                if (currentTime >= startTime && currentTime < endTime) {
-                    activeSchedule = schedule;
-                    break;
+            const isOvernightSchedule = isOvernight(schedule.startTime, schedule.endTime);
+            let isActiveNow = false;
+
+            if (!isOvernightSchedule) {
+                if (currentTime >= schedule.startTime && currentTime < schedule.endTime) {
+                    isActiveNow = true;
                 }
             } else {
-                if (currentTime >= startTime || currentTime < endTime) {
-                    activeSchedule = schedule;
-                    break;
+                if (currentTime >= schedule.startTime || currentTime < schedule.endTime) {
+                    isActiveNow = true;
                 }
+            }
+
+            if (isActiveNow) {
+                activeSchedule = schedule;
+                break;
             }
         }
 
         if (!activeSchedule) {
-            return res.status(400).json({
-                message: "No active event to skip"
-            });
+            return res.status(400).json({ message: "No active event to skip" });
         }
 
         await scheduleSkipModel.deleteMany({ deviceId });
-
-        // 🔥 Save skip
         await scheduleSkipModel.create({
             deviceId,
             scheduleId: activeSchedule._id,
             date: todayDate
         });
 
-        // 🔥 IMMEDIATE EFFECT
         await sendCommandToESP(deviceId, "OFF");
 
         console.log("⛔ Event skipped + device turned OFF");
-
-        res.json({
-            message: "⛔ Event skipped and device turned OFF"
-        });
+        res.json({ message: "⛔ Event skipped and device turned OFF" });
 
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: err.message });
     }
 };
+// const skipCurrentEvent = async (req, res) => {
+//     try {
+//         const { deviceId } = req.body;
+
+//         if (!deviceId) {
+//             return res.status(400).json({ message: "deviceId required" });
+//         }
+
+//         const now = new Date();
+//         const todayDate = now.toISOString().split("T")[0];
+
+//         const currentDay = now.getUTCDay();
+
+//         const dayMapReverse = {
+//             0: "sunday",
+//             1: "monday",
+//             2: "tuesday",
+//             3: "wednesday",
+//             4: "thursday",
+//             5: "friday",
+//             6: "saturday"
+//         };
+
+//         const today = dayMapReverse[currentDay];
+
+//         const hours = String(now.getUTCHours()).padStart(2, "0");
+//         const minutes = String(now.getUTCMinutes()).padStart(2, "0");
+//         const currentTime = `${hours}:${minutes}`;
+
+//         const schedules = await scheduleModel.find({
+//             deviceId,
+//             days: today,
+//             status: "ACTIVE"
+//         });
+
+//         let activeSchedule = null;
+
+//         for (const schedule of schedules) {
+//             const { startTime, endTime } = schedule;
+
+//             if (startTime < endTime) {
+//                 if (currentTime >= startTime && currentTime < endTime) {
+//                     activeSchedule = schedule;
+//                     break;
+//                 }
+//             } else {
+//                 if (currentTime >= startTime || currentTime < endTime) {
+//                     activeSchedule = schedule;
+//                     break;
+//                 }
+//             }
+//         }
+
+//         if (!activeSchedule) {
+//             return res.status(400).json({
+//                 message: "No active event to skip"
+//             });
+//         }
+
+//         await scheduleSkipModel.deleteMany({ deviceId });
+
+//         // 🔥 Save skip
+//         await scheduleSkipModel.create({
+//             deviceId,
+//             scheduleId: activeSchedule._id,
+//             date: todayDate
+//         });
+
+//         // 🔥 IMMEDIATE EFFECT
+//         await sendCommandToESP(deviceId, "OFF");
+
+//         console.log("⛔ Event skipped + device turned OFF");
+
+//         res.json({
+//             message: "⛔ Event skipped and device turned OFF"
+//         });
+
+//     } catch (err) {
+//         console.error(err);
+//         res.status(500).json({ message: err.message });
+//     }
+// };
 
 // disable and enable schedule
 const updateScheduleStatus = async (req, res) => {
@@ -541,86 +602,103 @@ const deleteSchedule = async (req, res) => {
 //     }
 // };
 
-
+// getCurrentOrNextSchedule
 const getCurrentOrNextSchedule = async (req, res) => {
     try {
         const { deviceId } = req.params;
-
-        if (!deviceId) {
-            return res.status(400).json({ message: "deviceId required" });
-        }
+        if (!deviceId) return res.status(400).json({ message: "deviceId required" });
 
         const now = new Date();
-        const todayDate = now.toISOString().split("T")[0];        // e.g., "2026-04-30"
-        const currentDay = now.getUTCDay();
+        const todayDate = now.toISOString().split("T")[0];
+        const currentDayIndex = now.getUTCDay(); // 0 = sunday, 1 = monday, ...
 
         const dayMapReverse = {
             0: "sunday", 1: "monday", 2: "tuesday", 3: "wednesday",
             4: "thursday", 5: "friday", 6: "saturday"
         };
 
-        const today = dayMapReverse[currentDay];
+        const todayName = dayMapReverse[currentDayIndex];
         const currentTime = `${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
+        const currentMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
 
-        // Get all active schedules for this device
-        const schedules = await scheduleModel.find({
-            deviceId,
-            status: "ACTIVE"
-        });
-
-        // Check if any event was skipped TODAY
-        const skippedRecord = await scheduleSkipModel.findOne({
-            deviceId,
-            date: todayDate
-        });
+        const schedules = await scheduleModel.find({ deviceId, status: "ACTIVE" });
+        const skippedRecord = await scheduleSkipModel.findOne({ deviceId, date: todayDate });
 
         let active = null;
-        let upcoming = null;
+        let nextEvent = null;
+        let minMinutesToNext = Infinity;
 
         for (const schedule of schedules) {
-            const daysMatch = schedule.days.includes(today);
-            if (!daysMatch) continue;
+            const relevantDays = getScheduleDaysForCheck(schedule);
+            if (!relevantDays.length) continue;
 
-            const { startTime, endTime } = schedule;
-
-            // Check if this specific schedule was skipped today
+            const isOvernightSchedule = isOvernight(schedule.startTime, schedule.endTime);
             const isThisScheduleSkipped = skippedRecord &&
                 skippedRecord.scheduleId.toString() === schedule._id.toString();
 
-            // === CURRENT EVENT CHECK ===
+            // ====================== CURRENT EVENT CHECK ======================
             let isCurrentlyActive = false;
 
-            if (startTime < endTime) {
-                if (currentTime >= startTime && currentTime < endTime) {
+            if (!isOvernightSchedule) {
+                if (currentTime >= schedule.startTime && currentTime < schedule.endTime) {
                     isCurrentlyActive = true;
                 }
             } else {
-                if (currentTime >= startTime || currentTime < endTime) {
+                if (currentTime >= schedule.startTime || currentTime < schedule.endTime) {
                     isCurrentlyActive = true;
                 }
             }
 
             if (isCurrentlyActive) {
-                if (isThisScheduleSkipped) {
-                    console.log(`[Skipped] Event for ${deviceId} was skipped today`);
-                    continue;                    // Skip this event - user already skipped it
+                if (!isThisScheduleSkipped) {
+                    active = schedule;
+                    break; // Current event has highest priority
                 }
-                active = schedule;
-                break;
+                continue;
             }
 
-            // === UPCOMING EVENT ===
-            const todayMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+            // ====================== NEXT EVENT LOGIC ======================
             const [sHour, sMin] = schedule.startTime.split(":");
-            const startMinutes = parseInt(sHour) * 60 + parseInt(sMin);
+            const startMinutesToday = parseInt(sHour) * 60 + parseInt(sMin);
 
-            if (startMinutes > todayMinutes) {
-                if (!upcoming || startMinutes < upcoming.startMinutes) {
-                    upcoming = { ...schedule._doc, startMinutes };
+            // Find the next occurrence of this schedule
+            for (let i = 0; i < 7; i++) {
+                const dayOffset = i;
+                const checkDayIndex = (currentDayIndex + dayOffset) % 7;
+                const checkDayName = dayMapReverse[checkDayIndex];
+
+                if (!relevantDays.includes(checkDayName)) continue;
+
+                let minutesUntilStart;
+
+                if (dayOffset === 0) {
+                    // Today
+                    if (startMinutesToday > currentMinutes) {
+                        minutesUntilStart = startMinutesToday - currentMinutes;
+                    } else {
+                        continue; // Already passed today
+                    }
+                } else {
+                    // Future days
+                    minutesUntilStart = (dayOffset * 24 * 60) + startMinutesToday - currentMinutes;
                 }
+
+                if (minutesUntilStart < minMinutesToNext) {
+                    minMinutesToNext = minutesUntilStart;
+
+                    nextEvent = {
+                        ...schedule._doc,
+                        nextOccurrenceInMinutes: minutesUntilStart,
+                        nextDay: checkDayName,
+                        nextStartTime: schedule.startTime
+                    };
+                }
+
+                break; // Found the soonest day for this schedule
             }
         }
 
+        // ====================== RESPONSE ======================
         if (active) {
             return res.status(200).json({
                 type: "CURRENT",
@@ -628,16 +706,18 @@ const getCurrentOrNextSchedule = async (req, res) => {
             });
         }
 
-        if (upcoming) {
+        if (nextEvent) {
+            // Clean response
+            delete nextEvent.nextOccurrenceInMinutes;
             return res.status(200).json({
                 type: "NEXT",
-                event: upcoming
+                event: nextEvent
             });
         }
 
         return res.status(200).json({
             type: "NO_EVENT",
-            message: "No active or upcoming event"
+            message: "No active or upcoming schedule found"
         });
 
     } catch (err) {
@@ -645,5 +725,109 @@ const getCurrentOrNextSchedule = async (req, res) => {
         return res.status(500).json({ message: err.message });
     }
 };
+
+// const getCurrentOrNextSchedule = async (req, res) => {
+//     try {
+//         const { deviceId } = req.params;
+
+//         if (!deviceId) {
+//             return res.status(400).json({ message: "deviceId required" });
+//         }
+
+//         const now = new Date();
+//         const todayDate = now.toISOString().split("T")[0];        // e.g., "2026-04-30"
+//         const currentDay = now.getUTCDay();
+
+//         const dayMapReverse = {
+//             0: "sunday", 1: "monday", 2: "tuesday", 3: "wednesday",
+//             4: "thursday", 5: "friday", 6: "saturday"
+//         };
+
+//         const today = dayMapReverse[currentDay];
+//         const currentTime = `${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
+
+//         // Get all active schedules for this device
+//         const schedules = await scheduleModel.find({
+//             deviceId,
+//             status: "ACTIVE"
+//         });
+
+//         // Check if any event was skipped TODAY
+//         const skippedRecord = await scheduleSkipModel.findOne({
+//             deviceId,
+//             date: todayDate
+//         });
+
+//         let active = null;
+//         let upcoming = null;
+
+//         for (const schedule of schedules) {
+//             const daysMatch = schedule.days.includes(today);
+//             if (!daysMatch) continue;
+
+//             const { startTime, endTime } = schedule;
+
+//             // Check if this specific schedule was skipped today
+//             const isThisScheduleSkipped = skippedRecord &&
+//                 skippedRecord.scheduleId.toString() === schedule._id.toString();
+
+//             // === CURRENT EVENT CHECK ===
+//             let isCurrentlyActive = false;
+
+//             if (startTime < endTime) {
+//                 if (currentTime >= startTime && currentTime < endTime) {
+//                     isCurrentlyActive = true;
+//                 }
+//             } else {
+//                 if (currentTime >= startTime || currentTime < endTime) {
+//                     isCurrentlyActive = true;
+//                 }
+//             }
+
+//             if (isCurrentlyActive) {
+//                 if (isThisScheduleSkipped) {
+//                     console.log(`[Skipped] Event for ${deviceId} was skipped today`);
+//                     continue;                    // Skip this event - user already skipped it
+//                 }
+//                 active = schedule;
+//                 break;
+//             }
+
+//             // === UPCOMING EVENT ===
+//             const todayMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+//             const [sHour, sMin] = schedule.startTime.split(":");
+//             const startMinutes = parseInt(sHour) * 60 + parseInt(sMin);
+
+//             if (startMinutes > todayMinutes) {
+//                 if (!upcoming || startMinutes < upcoming.startMinutes) {
+//                     upcoming = { ...schedule._doc, startMinutes };
+//                 }
+//             }
+//         }
+
+//         if (active) {
+//             return res.status(200).json({
+//                 type: "CURRENT",
+//                 event: active
+//             });
+//         }
+
+//         if (upcoming) {
+//             return res.status(200).json({
+//                 type: "NEXT",
+//                 event: upcoming
+//             });
+//         }
+
+//         return res.status(200).json({
+//             type: "NO_EVENT",
+//             message: "No active or upcoming event"
+//         });
+
+//     } catch (err) {
+//         console.error(err);
+//         return res.status(500).json({ message: err.message });
+//     }
+// };
 
 module.exports = { createSchedule, eventTrigger, skipCurrentEvent, updateScheduleStatus, getAllSchedules, getScheduleById, getSchedulesByDevice, toggleDeviceSwitch, deleteSchedule, getCurrentOrNextSchedule, getDeviceStatus };
