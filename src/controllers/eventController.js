@@ -638,9 +638,9 @@ const getCurrentOrNextSchedule = async (req, res) => {
                 skippedRecord.scheduleId.toString() === schedule._id.toString();
 
             // ====================== CURRENT EVENT CHECK ======================
-            let isCurrentlyActive = false;
-
             if (relevantDays.includes(todayName)) {
+                let isCurrentlyActive = false;
+
                 if (!isOvernightSchedule) {
                     if (currentTime >= schedule.startTime && currentTime < schedule.endTime) {
                         isCurrentlyActive = true;
@@ -650,19 +650,20 @@ const getCurrentOrNextSchedule = async (req, res) => {
                         isCurrentlyActive = true;
                     }
                 }
+
+                if (isCurrentlyActive && !isThisScheduleSkipped) {
+                    active = schedule;
+                    console.log(`✅ ACTIVE EVENT FOUND: ${schedule.startTime}-${schedule.endTime}`);
+                    break;
+                }
             }
 
-            if (isCurrentlyActive && !isThisScheduleSkipped) {
-                active = schedule;
-                console.log(`✅ Active Event Found: ${schedule.startTime} - ${schedule.endTime}`);
-                break;
-            }
-
-            // ====================== NEXT EVENT LOGIC (Always Check) ======================
+            // ====================== NEXT EVENT LOGIC (Fixed) ======================
             const [sHour, sMin] = schedule.startTime.split(":");
             const startMinutes = parseInt(sHour) * 60 + parseInt(sMin);
 
-            for (let i = 0; i < 7; i++) {
+            // Check today + next 7 days (up to 8 checks)
+            for (let i = 0; i <= 7; i++) {
                 const dayOffset = i;
                 const checkDayIndex = (currentDayIndex + dayOffset) % 7;
                 const checkDayName = dayMapReverse[checkDayIndex];
@@ -676,10 +677,10 @@ const getCurrentOrNextSchedule = async (req, res) => {
                     if (startMinutes > currentMinutes) {
                         minutesUntil = startMinutes - currentMinutes;
                     } else {
-                        continue;
+                        continue; // passed → will check next week below
                     }
                 } else {
-                    // Future days (including next week)
+                    // Future days including next week
                     minutesUntil = (dayOffset * 24 * 60) + startMinutes - currentMinutes;
                 }
 
@@ -689,11 +690,10 @@ const getCurrentOrNextSchedule = async (req, res) => {
                     nextEvent = {
                         ...schedule._doc,
                         nextDay: checkDayName,
-                        nextStartTime: schedule.startTime,
-                        minutesUntil
+                        nextStartTime: schedule.startTime
                     };
                 }
-                break; // Take first valid day for this schedule
+                break; // Take earliest possible for this schedule
             }
         }
 
@@ -703,8 +703,6 @@ const getCurrentOrNextSchedule = async (req, res) => {
         }
 
         if (nextEvent) {
-            // Clean response (remove internal fields)
-            delete nextEvent.minutesUntil;
             return res.status(200).json({ type: "NEXT", event: nextEvent });
         }
 
