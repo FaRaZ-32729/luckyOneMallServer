@@ -17,7 +17,31 @@ const createSchedule = async (req, res) => {
         }
 
         const startCron = generateCron(startTime, days);
-        const endCron = generateCron(endTime, days);
+
+        let endDays = [...days];
+
+        // 🔥 if overnight → shift OFF to next day
+        if (startTime > endTime) {
+            const dayOrder = [
+                "sunday",
+                "monday",
+                "tuesday",
+                "wednesday",
+                "thursday",
+                "friday",
+                "saturday"
+            ];
+
+            endDays = days.map(d => {
+                const idx = dayOrder.indexOf(d.toLowerCase());
+                return dayOrder[(idx + 1) % 7]; // next day
+            });
+        }
+
+        const endCron = generateCron(endTime, endDays);
+
+        // const startCron = generateCron(startTime, days);
+        // const endCron = generateCron(endTime, days);
 
         const existing = await scheduleModel.findOne({
             deviceId,
@@ -260,7 +284,7 @@ const skipCurrentEvent = async (req, res) => {
         }
 
         await scheduleSkipModel.deleteMany({ deviceId });
-        
+
         // 🔥 Save skip
         await scheduleSkipModel.create({
             deviceId,
@@ -516,6 +540,8 @@ const deleteSchedule = async (req, res) => {
 //         return res.status(500).json({ message: err.message });
 //     }
 // };
+
+
 const getCurrentOrNextSchedule = async (req, res) => {
     try {
         const { deviceId } = req.params;
