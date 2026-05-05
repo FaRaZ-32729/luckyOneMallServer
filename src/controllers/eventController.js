@@ -445,21 +445,81 @@ const getScheduleById = async (req, res) => {
     }
 };
 
+// const getSchedulesByDevice = async (req, res) => {
+//     try {
+//         const { deviceId } = req.params;
+
+//         if (!deviceId) {
+//             return res.status(400).json({
+//                 message: "deviceId required"
+//             });
+//         }
+
+//         const schedules = await scheduleModel.find({ deviceId });
+
+//         return res.status(200).json({
+//             count: schedules.length,
+//             schedules
+//         });
+
+//     } catch (err) {
+//         console.error(err);
+//         res.status(500).json({ message: err.message });
+//     }
+// };
+
 const getSchedulesByDevice = async (req, res) => {
     try {
         const { deviceId } = req.params;
 
         if (!deviceId) {
             return res.status(400).json({
-                message: "deviceId required"
+                message: "deviceId is required"
             });
         }
 
-        const schedules = await scheduleModel.find({ deviceId });
+        const schedules = await scheduleModel.find({ deviceId }).sort({ createdAt: -1 });
+
+        if (!schedules || schedules.length === 0) {
+            return res.status(200).json({
+                message: "No schedules found for this device",
+            });
+        }
+
+        // Enrich schedules with useful info
+        const enrichedSchedules = schedules.map(schedule => {
+            const isOvernightSchedule = isOvernight(schedule.startTime, schedule.endTime);
+
+            // Calculate duration in minutes
+            let durationMinutes = 0;
+
+            if (!isOvernightSchedule) {
+                const [startH, startM] = schedule.startTime.split(":").map(Number);
+                const [endH, endM] = schedule.endTime.split(":").map(Number);
+                durationMinutes = (endH * 60 + endM) - (startH * 60 + startM);
+            } else {
+                // Overnight: from start till midnight + midnight till end
+                const [startH, startM] = schedule.startTime.split(":").map(Number);
+                const [endH, endM] = schedule.endTime.split(":").map(Number);
+                durationMinutes = (24 * 60 - (startH * 60 + startM)) + (endH * 60 + endM);
+            }
+
+            const durationHours = (durationMinutes / 60).toFixed(1);
+
+            return {
+                ...schedule.toObject(),
+                isOvernight: isOvernightSchedule,
+                durationMinutes,
+                durationHours: `${durationHours} hours`,
+                durationText: durationMinutes >= 60
+                    ? `${Math.floor(durationMinutes / 60)}h ${durationMinutes % 60}m`
+                    : `${durationMinutes}m`
+            };
+        });
 
         return res.status(200).json({
-            count: schedules.length,
-            schedules
+            count: enrichedSchedules.length,
+            schedules: enrichedSchedules
         });
 
     } catch (err) {
