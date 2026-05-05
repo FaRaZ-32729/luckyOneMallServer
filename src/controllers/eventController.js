@@ -141,6 +141,52 @@ const eventTrigger = async (req, res) => {
 };
 
 // toggle button api 
+// const toggleDeviceSwitch = async (req, res) => {
+//     try {
+//         const { deviceId, status } = req.body;
+
+//         if (!deviceId || !status) {
+//             return res.status(400).json({
+//                 message: "deviceId and status are required"
+//             });
+//         }
+
+//         if (!["ON", "OFF"].includes(status)) {
+//             return res.status(400).json({
+//                 message: "Status must be ON or OFF"
+//             });
+//         }
+
+//         // Check device exists
+//         const device = await deviceModel.findOne({ deviceId });
+//         if (!device) {
+//             return res.status(404).json({ message: "Device not found" });
+//         }
+
+//         // Optional: restrict only SD devices
+//         if (!["ESD", "TSD"].includes(device.deviceType)) {
+//             return res.status(400).json({
+//                 message: "Only Scheduler Devices can be controlled"
+//             });
+//         }
+
+//         // === SEND COMMAND TO ESP32 ===
+//         const commandSent = await sendCommandToESP(deviceId, status);
+
+//         return res.status(200).json({
+//             note: commandSent
+//                 ? "Command sent to device successfully"
+//                 : "Device is offline"
+//         });
+
+
+//     } catch (error) {
+//         console.error("Error controlling device:", error);
+//         res.status(500).json({ message: "Internal Server Error" });
+//     }
+// };
+
+// toggle button api 
 const toggleDeviceSwitch = async (req, res) => {
     try {
         const { deviceId, status } = req.body;
@@ -170,6 +216,52 @@ const toggleDeviceSwitch = async (req, res) => {
             });
         }
 
+        // 🔥 NEW: Check if any scheduled event is currently ACTIVE
+        const now = new Date();
+        const currentDayIndex = now.getUTCDay();
+        const currentTime = `${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
+
+        const dayMapReverse = {
+            0: "sunday", 1: "monday", 2: "tuesday", 3: "wednesday",
+            4: "thursday", 5: "friday", 6: "saturday"
+        };
+
+        const todayName = dayMapReverse[currentDayIndex];
+
+        const schedules = await scheduleModel.find({ deviceId, status: "ACTIVE" });
+
+        let isEventRunning = false;
+
+        for (const schedule of schedules) {
+            const relevantDays = getScheduleDaysForCheck(schedule);
+            if (!relevantDays.includes(todayName)) continue;
+
+            const isOvernightSchedule = isOvernight(schedule.startTime, schedule.endTime);
+
+            let isCurrentlyActive = false;
+
+            if (!isOvernightSchedule) {
+                if (currentTime >= schedule.startTime && currentTime < schedule.endTime) {
+                    isCurrentlyActive = true;
+                }
+            } else {
+                if (currentTime >= schedule.startTime || currentTime < schedule.endTime) {
+                    isCurrentlyActive = true;
+                }
+            }
+
+            if (isCurrentlyActive) {
+                isEventRunning = true;
+                break;
+            }
+        }
+
+        if (isEventRunning) {
+            return res.status(403).json({
+                message: "Cannot manually toggle device. A scheduled event is currently running."
+            });
+        }
+
         // === SEND COMMAND TO ESP32 ===
         const commandSent = await sendCommandToESP(deviceId, status);
 
@@ -178,7 +270,6 @@ const toggleDeviceSwitch = async (req, res) => {
                 ? "Command sent to device successfully"
                 : "Device is offline"
         });
-
 
     } catch (error) {
         console.error("Error controlling device:", error);
@@ -219,6 +310,73 @@ const getDeviceStatus = async (req, res) => {
         });
     }
 };
+
+// skip event api
+// const skipCurrentEvent = async (req, res) => {
+//     try {
+//         const { deviceId } = req.body;
+//         if (!deviceId) return res.status(400).json({ message: "deviceId required" });
+
+//         const now = new Date();
+//         const todayDate = now.toISOString().split("T")[0];
+//         const currentDay = now.getUTCDay();
+
+//         const dayMapReverse = {
+//             0: "sunday", 1: "monday", 2: "tuesday", 3: "wednesday",
+//             4: "thursday", 5: "friday", 6: "saturday"
+//         };
+
+//         const today = dayMapReverse[currentDay];
+//         const currentTime = `${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
+
+//         const schedules = await scheduleModel.find({ deviceId, status: "ACTIVE" });
+
+//         let activeSchedule = null;
+
+//         for (const schedule of schedules) {
+//             const relevantDays = getScheduleDaysForCheck(schedule);
+//             if (!relevantDays.includes(today)) continue;
+
+//             const isOvernightSchedule = isOvernight(schedule.startTime, schedule.endTime);
+//             let isActiveNow = false;
+
+//             if (!isOvernightSchedule) {
+//                 if (currentTime >= schedule.startTime && currentTime < schedule.endTime) {
+//                     isActiveNow = true;
+//                 }
+//             } else {
+//                 if (currentTime >= schedule.startTime || currentTime < schedule.endTime) {
+//                     isActiveNow = true;
+//                 }
+//             }
+
+//             if (isActiveNow) {
+//                 activeSchedule = schedule;
+//                 break;
+//             }
+//         }
+
+//         if (!activeSchedule) {
+//             return res.status(400).json({ message: "No active event to skip" });
+//         }
+
+//         await scheduleSkipModel.deleteMany({ deviceId });
+//         await scheduleSkipModel.create({
+//             deviceId,
+//             scheduleId: activeSchedule._id,
+//             date: todayDate
+//         });
+
+//         await sendCommandToESP(deviceId, "OFF");
+
+//         console.log("⛔ Event skipped + device turned OFF");
+//         res.json({ message: "⛔ Event skipped and device turned OFF" });
+
+//     } catch (err) {
+//         console.error(err);
+//         res.status(500).json({ message: err.message });
+//     }
+// };
 
 // skip event api
 const skipCurrentEvent = async (req, res) => {
@@ -269,23 +427,35 @@ const skipCurrentEvent = async (req, res) => {
             return res.status(400).json({ message: "No active event to skip" });
         }
 
+        // 🔥 Try to send OFF command first
+        const commandSent = await sendCommandToESP(deviceId, "OFF");
+
+        if (!commandSent) {
+            return res.status(400).json({
+                message: "Device is offline. Cannot skip event."
+            });
+        }
+
+        // Only save skip if command was successfully sent
         await scheduleSkipModel.deleteMany({ deviceId });
+
         await scheduleSkipModel.create({
             deviceId,
             scheduleId: activeSchedule._id,
             date: todayDate
         });
 
-        await sendCommandToESP(deviceId, "OFF");
-
-        console.log("⛔ Event skipped + device turned OFF");
-        res.json({ message: "⛔ Event skipped and device turned OFF" });
+        console.log("Event skipped + device turned OFF");
+        res.json({
+            message: "Event skipped and device turned OFF successfully"
+        });
 
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: err.message });
     }
 };
+
 // const skipCurrentEvent = async (req, res) => {
 //     try {
 //         const { deviceId } = req.body;
