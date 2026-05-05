@@ -79,12 +79,12 @@ const schedulingWss = schedulingSocket(server);
 // alerts ws://ip/localhost:5000/ws/alerts
 
 server.on("upgrade", (req, socket, head) => {
-    if (req.url === "/ws/alerts") {
+    if (req.url.startsWith("/ws/alerts")) {
         alertWss.handleUpgrade(req, socket, head, (ws) => {
             alertWss.emit("connection", ws, req);
         });
     }
-    else if (req.url === "/ws/scheduling") {          // ← New endpoint
+    else if (req.url.startsWith("/ws/scheduling")) { 
         schedulingWss.handleUpgrade(req, socket, head, (ws) => {
             schedulingWss.emit("connection", ws, req);
         });
