@@ -6,6 +6,7 @@ const { sendCommandToESP } = require("../utils/schedulingSocket");
 const deviceModel = require("../models/deviceModel");
 const deviceSwitchModel = require("../models/deviceSwitchModel");
 const { isOvernight, getScheduleDaysForCheck } = require("../utils/scheduleHelpers");
+const mongoose = require("mongoose");
 
 const createSchedule = async (req, res) => {
     try {
@@ -699,8 +700,6 @@ const getCurrentOrNextSchedule = async (req, res) => {
         const todayName = dayMapReverse[currentDayIndex];
         const todayDate = now.toISOString().split("T")[0];
 
-        console.log(`🔍 UTC Now: ${currentTime} | Today: ${todayName}`);
-
         const schedules = await scheduleModel.find({ deviceId, status: "ACTIVE" });
         const skippedRecord = await scheduleSkipModel.findOne({ deviceId, date: todayDate });
 
@@ -730,7 +729,6 @@ const getCurrentOrNextSchedule = async (req, res) => {
 
                 if (isCurrentlyActive && !isThisScheduleSkipped) {
                     active = schedule;
-                    console.log(`✅ ACTIVE EVENT FOUND: ${schedule.startTime}-${schedule.endTime}`);
                     break;
                 }
             }
@@ -771,15 +769,18 @@ const getCurrentOrNextSchedule = async (req, res) => {
             }
         }
 
-        // ====================== ADD DURATION TO RESPONSE ======================
+        // ====================== ADD DURATION ======================
         const addDuration = (event) => {
             if (!event) return event;
 
-            const isOvernightSchedule = isOvernight(event.startTime, event.endTime);
+            // Convert Mongoose document to plain object
+            const plainEvent = event instanceof mongoose.Model ? event.toObject() : event;
+
+            const isOvernightSchedule = isOvernight(plainEvent.startTime, plainEvent.endTime);
             let durationMinutes = 0;
 
-            const [startH, startM] = event.startTime.split(":").map(Number);
-            const [endH, endM] = event.endTime.split(":").map(Number);
+            const [startH, startM] = plainEvent.startTime.split(":").map(Number);
+            const [endH, endM] = plainEvent.endTime.split(":").map(Number);
 
             if (!isOvernightSchedule) {
                 durationMinutes = (endH * 60 + endM) - (startH * 60 + startM);
@@ -791,7 +792,7 @@ const getCurrentOrNextSchedule = async (req, res) => {
             const minutes = durationMinutes % 60;
 
             return {
-                ...event,
+                ...plainEvent,
                 isOvernight: isOvernightSchedule,
                 duration: `${hours}h ${minutes}m`
             };
