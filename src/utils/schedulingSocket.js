@@ -65,7 +65,7 @@ const schedulingSocket = (server) => {
                         { deviceId: data.deviceId },
                         {
                             deviceId: data.deviceId,
-                            status: data.status,
+                            status: data.status || data.state,
                             lastChangedAt: new Date()
                         },
                         {
@@ -167,27 +167,6 @@ const sendCommandToESP = async (deviceId, status) => {
     };
 
     // ==================== ONLY FOR "ON" → attach schedule times ====================
-    // if (status === "ON") {
-    //     try {
-    //         // const now = moment().tz("Asia/Karachi").toDate();
-    //         const now = new Date();
-
-    //         const activeSchedule = await scheduleModel.findOne({
-    //             deviceId,
-    //             startTime: { $lte: now },
-    //             endTime: { $gt: now }
-    //         }).sort({ startTime: -1 });
-
-    //         if (activeSchedule) {
-    //             payload.startTimeUnix = Math.floor(activeSchedule.startTime.getTime() / 1000);
-    //             payload.endTimeUnix = Math.floor(activeSchedule.endTime.getTime() / 1000);
-
-    //             console.log(`ON command enriched with times → endTimeUnix: ${payload.endTimeUnix}`);
-    //         }
-    //     } catch (err) {
-    //         console.error("Failed to fetch schedule times for ON command:", err.message);
-    //     }
-    // }
     if (status === "ON") {
         try {
             const now = new Date();

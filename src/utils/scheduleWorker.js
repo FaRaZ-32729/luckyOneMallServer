@@ -13,7 +13,6 @@ const scheduleModel = require("../models/eventModel");
 const scheduleSkipModel = require("../models/scheduleSkipModel");
 
 console.log("🚀 Schedule Worker Starting...");
-console.log("REDIS_URL Loaded:", process.env.REDIS_URL ? "✅ YES" : "❌ NO");
 
 
 mongoose.connect(process.env.MONGODB_URL)
