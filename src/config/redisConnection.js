@@ -24,25 +24,36 @@
 
 // module.exports = redisConnection;
 
-
-
 const IORedis = require("ioredis");
 
 const redisConnection = new IORedis({
     host: "127.0.0.1",
     port: 6379,
-    password: "Growmore12345@",
+
+    // 🔐 password from env (safer for production)
+    password: process.env.REDIS_PASSWORD || "Growmore12345@",
+
+    // ⚡ BullMQ required setting
     maxRetriesPerRequest: null,
-    enableReadyCheck: false
+
+    // ⚡ IMPORTANT for BullMQ stability
+    enableReadyCheck: true,
+
+    // 🔁 prevents app crash on temporary Redis failure
+    retryStrategy(times) {
+        return Math.min(times * 100, 3000);
+    }
 });
+
 // ================== EVENTS ==================
 
+// ⚠️ FIXED: connect is NOT "connecting"
 redisConnection.on("connect", () => {
-    console.log("🔌 Redis: Connecting...");
+    console.log("🔌 Redis: TCP Connection Established");
 });
 
 redisConnection.on("ready", () => {
-    console.log("✅ Redis: Connected & Ready to use");
+    console.log("✅ Redis: Ready to use");
 });
 
 redisConnection.on("error", (err) => {
