@@ -140,6 +140,7 @@ const eventTrigger = async (req, res) => {
     }
 };
 
+
 // toggle button api 
 // const toggleDeviceSwitch = async (req, res) => {
 //     try {
@@ -170,6 +171,52 @@ const eventTrigger = async (req, res) => {
 //             });
 //         }
 
+//         // 🔥 NEW: Check if any scheduled event is currently ACTIVE
+//         const now = new Date();
+//         const currentDayIndex = now.getUTCDay();
+//         const currentTime = `${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
+
+//         const dayMapReverse = {
+//             0: "sunday", 1: "monday", 2: "tuesday", 3: "wednesday",
+//             4: "thursday", 5: "friday", 6: "saturday"
+//         };
+
+//         const todayName = dayMapReverse[currentDayIndex];
+
+//         const schedules = await scheduleModel.find({ deviceId, status: "ACTIVE" });
+
+//         let isEventRunning = false;
+
+//         for (const schedule of schedules) {
+//             const relevantDays = getScheduleDaysForCheck(schedule);
+//             if (!relevantDays.includes(todayName)) continue;
+
+//             const isOvernightSchedule = isOvernight(schedule.startTime, schedule.endTime);
+
+//             let isCurrentlyActive = false;
+
+//             if (!isOvernightSchedule) {
+//                 if (currentTime >= schedule.startTime && currentTime < schedule.endTime) {
+//                     isCurrentlyActive = true;
+//                 }
+//             } else {
+//                 if (currentTime >= schedule.startTime || currentTime < schedule.endTime) {
+//                     isCurrentlyActive = true;
+//                 }
+//             }
+
+//             if (isCurrentlyActive) {
+//                 isEventRunning = true;
+//                 break;
+//             }
+//         }
+
+//         if (isEventRunning) {
+//             return res.status(403).json({
+//                 message: "Cannot manually toggle device. A scheduled event is currently running."
+//             });
+//         }
+
 //         // === SEND COMMAND TO ESP32 ===
 //         const commandSent = await sendCommandToESP(deviceId, status);
 
@@ -178,7 +225,6 @@ const eventTrigger = async (req, res) => {
 //                 ? "Command sent to device successfully"
 //                 : "Device is offline"
 //         });
-
 
 //     } catch (error) {
 //         console.error("Error controlling device:", error);
@@ -209,15 +255,16 @@ const toggleDeviceSwitch = async (req, res) => {
             return res.status(404).json({ message: "Device not found" });
         }
 
-        // Optional: restrict only SD devices
+        // Only Scheduler Devices
         if (!["ESD", "TSD"].includes(device.deviceType)) {
             return res.status(400).json({
                 message: "Only Scheduler Devices can be controlled"
             });
         }
 
-        // 🔥 NEW: Check if any scheduled event is currently ACTIVE
+        // ====================== CHECK CURRENT SCHEDULE ======================
         const now = new Date();
+        const todayDate = now.toISOString().split("T")[0];
         const currentDayIndex = now.getUTCDay();
         const currentTime = `${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}`;
 
@@ -229,14 +276,17 @@ const toggleDeviceSwitch = async (req, res) => {
         const todayName = dayMapReverse[currentDayIndex];
 
         const schedules = await scheduleModel.find({ deviceId, status: "ACTIVE" });
+        const skippedRecord = await scheduleSkipModel.findOne({ deviceId, date: todayDate });
 
-        let isEventRunning = false;
+        let isEventRunningAndNotSkipped = false;
 
         for (const schedule of schedules) {
             const relevantDays = getScheduleDaysForCheck(schedule);
             if (!relevantDays.includes(todayName)) continue;
 
             const isOvernightSchedule = isOvernight(schedule.startTime, schedule.endTime);
+            const isThisScheduleSkipped = skippedRecord &&
+                skippedRecord.scheduleId.toString() === schedule._id.toString();
 
             let isCurrentlyActive = false;
 
@@ -251,12 +301,15 @@ const toggleDeviceSwitch = async (req, res) => {
             }
 
             if (isCurrentlyActive) {
-                isEventRunning = true;
-                break;
+                if (!isThisScheduleSkipped) {
+                    isEventRunningAndNotSkipped = true;
+                    break;
+                }
             }
         }
 
-        if (isEventRunning) {
+        // Block manual toggle only if event is running AND not skipped
+        if (isEventRunningAndNotSkipped) {
             return res.status(403).json({
                 message: "Cannot manually toggle device. A scheduled event is currently running."
             });
