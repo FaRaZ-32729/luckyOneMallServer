@@ -16,6 +16,7 @@ const schedulingSocket = (server) => {
         console.log(`Scheduling Device connected from ${serverIp}`);
 
         ws.deviceId = null;
+        ws.isAlive = true;
 
         ws.on("message", async (message) => {
             console.log("Received from ESP32:", message.toString());
@@ -51,11 +52,6 @@ const schedulingSocket = (server) => {
             // Set deviceId for all valid messages
             ws.deviceId = data.deviceId;
 
-            // ==================== IGNORE ACK / CONTROL RESPONSES ====================
-            // if (data.ack) {
-            //     console.log("⏭ ACK received, skipping DB update");
-            //     return;
-            // }
             // ================== ACK HANDLING (IMPORTANT FIX) ==================
             if (data.ack) {
                 console.log("ACK received from ESP:", data);
@@ -136,8 +132,16 @@ const schedulingSocket = (server) => {
             console.log("status:", data);
         });
 
+        // Heartbeat Response
+        ws.on("pong", () => {
+            ws.isAlive = true;
+        });
+
         ws.on("close", () => {
             console.log(`Device disconnected: ${ws.deviceId || 'Unknown'}`);
+            // if (ws.deviceId) {
+            //     console.log(`Marked ${ws.deviceId} as offline`);
+            // }
         });
 
         ws.on("error", (err) => {
@@ -151,6 +155,55 @@ const schedulingSocket = (server) => {
             }
         }, 1000);
     });
+
+    // 🔥 Aggressive Stale Connection Cleanup
+    // setInterval(() => {
+    //     if (!schedulingWss) return;
+
+    //     let cleaned = 0;
+    //     schedulingWss.clients.forEach((client) => {
+    //         if (client.readyState !== WebSocket.OPEN) {
+    //             if (client.deviceId) {
+    //                 console.log(`🧹 Removed stale connection: ${client.deviceId}`);
+    //             }
+    //             client.terminate();
+    //             cleaned++;
+    //         }
+    //     });
+
+    //     if (cleaned > 0) {
+    //         console.log(`🧹 Cleaned ${cleaned} stale WebSocket connections`);
+    //     }
+    // }, 800);
+
+    // ==================== HEARTBEAT SYSTEM (Most Reliable) ====================
+    const heartbeatInterval = setInterval(() => {
+        if (!schedulingWss) return;
+
+        let cleaned = 0;
+        schedulingWss.clients.forEach((client) => {
+            if (client.readyState !== WebSocket.OPEN) {
+                if (client.deviceId) console.log(`🧹 Removed stale: ${client.deviceId}`);
+                client.terminate();
+                cleaned++;
+                return;
+            }
+
+            if (!client.isAlive) {
+                if (client.deviceId) console.log(`💀 Terminating dead connection: ${client.deviceId}`);
+                client.terminate();
+                cleaned++;
+                return;
+            }
+
+            client.isAlive = false;
+            client.ping();        // Send ping
+        });
+
+        if (cleaned > 0) {
+            console.log(`🧹 Cleaned ${cleaned} dead connections`);
+        }
+    }, 5000);
 
     return schedulingWss;
 };
@@ -246,11 +299,23 @@ const sendCommandToESP = async (deviceId, status) => {
     }
 
     let sent = false;
+    // schedulingWss.clients.forEach((client) => {
+    //     if (client.deviceId === deviceId && client.readyState === WebSocket.OPEN) {
+    //         client.send(JSON.stringify(payload));
+    //         console.log(`Command ${status} SENT to ${deviceId} ${status === "ON" ? "(with schedule times)" : ""}`);
+    //         sent = true;
+    //     }
+    // });
+
     schedulingWss.clients.forEach((client) => {
-        if (client.deviceId === deviceId && client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(payload));
-            console.log(`Command ${status} SENT to ${deviceId} ${status === "ON" ? "(with schedule times)" : ""}`);
-            sent = true;
+        if (client.deviceId === deviceId) {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify(payload));
+                console.log(`✅ Command ${status} SENT to ${deviceId}`);
+                sent = true;
+            } else {
+                client.terminate();
+            }
         }
     });
 
@@ -430,4 +495,36 @@ const reconcileMissedCommands = async (deviceId, ws) => {
 // };
 
 
-module.exports = { schedulingSocket, sendCommandToESP };
+const isDeviceOnline = (deviceId) => {
+    if (!schedulingWss || !deviceId) return false;
+
+    for (const client of schedulingWss.clients) {
+        if (client.deviceId === deviceId && client.readyState === WebSocket.OPEN) {
+            return true;
+        }
+    }
+    return false;
+};
+
+// const isDeviceOnline = (deviceId) => {
+//     if (!schedulingWss) return false;
+
+//     let isOnline = false;
+//     // for (const client of schedulingWss.clients) {
+//     //     if (client.deviceId === deviceId &&
+//     //         client.readyState === WebSocket.OPEN) {
+//     //         return true;
+//     //     }
+//     // }
+
+//     schedulingWss.clients.forEach((client) => {
+//         if (client.deviceId === deviceId &&
+//             client.readyState === WebSocket.OPEN) {
+//             isOnline = true;
+//         }
+//     });
+//     return isOnline;
+// };
+
+
+module.exports = { schedulingSocket, sendCommandToESP, isDeviceOnline };
