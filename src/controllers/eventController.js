@@ -238,31 +238,21 @@ const toggleDeviceSwitch = async (req, res) => {
         const { deviceId, status } = req.body;
 
         if (!deviceId || !status) {
-            return res.status(400).json({
-                message: "deviceId and status are required"
-            });
+            return res.status(400).json({ message: "deviceId and status are required" });
         }
 
         if (!["ON", "OFF"].includes(status)) {
-            return res.status(400).json({
-                message: "Status must be ON or OFF"
-            });
+            return res.status(400).json({ message: "Status must be ON or OFF" });
         }
 
-        // Check device exists
         const device = await deviceModel.findOne({ deviceId });
-        if (!device) {
-            return res.status(404).json({ message: "Device not found" });
-        }
+        if (!device) return res.status(404).json({ message: "Device not found" });
 
-        // Only Scheduler Devices
         if (!["ESD", "TSD"].includes(device.deviceType)) {
-            return res.status(400).json({
-                message: "Only Scheduler Devices can be controlled"
-            });
+            return res.status(400).json({ message: "Only Scheduler Devices can be controlled" });
         }
 
-        // ====================== CHECK CURRENT SCHEDULE ======================
+        // ====================== CHECK CURRENT ACTIVE EVENT ======================
         const now = new Date();
         const todayDate = now.toISOString().split("T")[0];
         const currentDayIndex = now.getUTCDay();
@@ -278,14 +268,17 @@ const toggleDeviceSwitch = async (req, res) => {
         const schedules = await scheduleModel.find({ deviceId, status: "ACTIVE" });
         const skippedRecord = await scheduleSkipModel.findOne({ deviceId, date: todayDate });
 
+        console.log(`Toggle Check → Device: ${deviceId} | Time: ${currentTime} | Skipped Record: ${!!skippedRecord}`);
+
         let isEventRunningAndNotSkipped = false;
+        let blockingSchedule = null;
 
         for (const schedule of schedules) {
             const relevantDays = getScheduleDaysForCheck(schedule);
             if (!relevantDays.includes(todayName)) continue;
 
             const isOvernightSchedule = isOvernight(schedule.startTime, schedule.endTime);
-            const isThisScheduleSkipped = skippedRecord &&
+            const isThisScheduleSkipped = skippedRecord && 
                 skippedRecord.scheduleId.toString() === schedule._id.toString();
 
             let isCurrentlyActive = false;
@@ -301,31 +294,33 @@ const toggleDeviceSwitch = async (req, res) => {
             }
 
             if (isCurrentlyActive) {
+                console.log(`Found running schedule: ${schedule.startTime}-${schedule.endTime} | Skipped: ${isThisScheduleSkipped}`);
+
                 if (!isThisScheduleSkipped) {
                     isEventRunningAndNotSkipped = true;
+                    blockingSchedule = schedule;
                     break;
+                } else {
+                    console.log("✅ This schedule is skipped → Allowing manual toggle");
                 }
             }
         }
 
-        // Block manual toggle only if event is running AND not skipped
         if (isEventRunningAndNotSkipped) {
             return res.status(403).json({
-                message: "Cannot manually toggle device. A scheduled event is currently running."
+                message: `Cannot manually toggle. Scheduled event (${blockingSchedule.startTime} - ${blockingSchedule.endTime}) is currently running.`
             });
         }
 
-        // === SEND COMMAND TO ESP32 ===
+        // === SEND COMMAND ===
         const commandSent = await sendCommandToESP(deviceId, status);
 
         return res.status(200).json({
-            note: commandSent
-                ? "Command sent to device successfully"
-                : "Device is offline"
+            note: commandSent ? "Command sent successfully" : "Device is offline"
         });
 
     } catch (error) {
-        console.error("Error controlling device:", error);
+        console.error("Error in toggleDeviceSwitch:", error);
         res.status(500).json({ message: "Internal Server Error" });
     }
 };
