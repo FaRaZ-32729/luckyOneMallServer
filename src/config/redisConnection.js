@@ -31,7 +31,7 @@ const redisConnection = new IORedis({
     port: 6379,
 
     // 🔐 password from env (safer for production)
-    // password: process.env.REDIS_PASSWORD || "Growmore12345@",
+    password: process.env.REDIS_PASSWORD || "Growmore12345@",
 
     // ⚡ BullMQ required setting
     maxRetriesPerRequest: null,
