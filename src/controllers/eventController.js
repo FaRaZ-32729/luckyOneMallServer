@@ -278,7 +278,7 @@ const toggleDeviceSwitch = async (req, res) => {
             if (!relevantDays.includes(todayName)) continue;
 
             const isOvernightSchedule = isOvernight(schedule.startTime, schedule.endTime);
-            const isThisScheduleSkipped = skippedRecord && 
+            const isThisScheduleSkipped = skippedRecord &&
                 skippedRecord.scheduleId.toString() === schedule._id.toString();
 
             let isCurrentlyActive = false;
@@ -1184,7 +1184,8 @@ const getCurrentOrNextSchedule = async (req, res) => {
 
         return res.status(200).json({
             type: "NO_EVENT",
-            message: "No active or upcoming schedule found"
+            message: "No active or upcoming schedule found",
+            isDeviceOnline: isDeviceOnline(deviceId)
         });
 
     } catch (err) {
